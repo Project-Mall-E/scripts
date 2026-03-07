@@ -1,0 +1,60 @@
+{
+  "stores": [
+    {
+      "name": "AmericanEagle",
+      "homepage": "https://www.ae.com/us/en/",
+      "domain": "ae.com",
+      "discovery_strategy": "auto",
+      "max_path_depth": 6
+    },
+    {
+      "name": "Abercrombie",
+      "homepage": "https://www.abercrombie.com/shop/us/",
+      "domain": "abercrombie.com",
+      "discovery_strategy": "auto"
+    },
+    {
+      "name": "Loft",
+      "homepage": "https://www.loft.com/",
+      "domain": "loft.com",
+      "discovery_strategy": "auto",
+      "max_path_depth": 3
+    }, 
+    {
+      "name": "Coach",
+      "homepage": "https://www.coach.com/shop/",
+      "domain": "coach.com",
+      "discovery_strategy": "auto"
+    },
+    {
+      "name": "Aritzia",
+      "homepage": "https://www.aritzia.com/us/en/clothing/",
+      "domain": "aritzia.com",
+      "discovery_strategy": "links"
+    },
+    {
+      "name": "Altar'dState",
+      "homepage": "https://www.altardstate.com/",
+      "domain": "altardstate.com",
+      "discovery_strategy": "auto"
+    },
+    {
+      "name": "Anthropologie",
+      "homepage": "https://www.anthropologie.com/",
+      "domain": "anthropologie.com",
+      "discovery_strategy": "auto"
+    },
+    {
+      "name": "Reformation",
+      "homepage": "https://www.reformation.com/",
+      "domain": "reformation.com",
+      "discovery_strategy": "auto"
+    }
+  ],
+  "settings": {
+    "rate_limit_seconds": 2.0,
+    "max_retries": 3,
+    "request_timeout_seconds": 30,
+    "max_crawl_depth": 2
+  }
+}

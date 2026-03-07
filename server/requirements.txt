@@ -1,0 +1,6 @@
+# Core dependencies for the clothing aggregator
+playwright>=1.40.0
+beautifulsoup4>=4.12.0
+aiohttp>=3.9.0
+lxml>=5.0.0
+rapidfuzz>=3.5.0
