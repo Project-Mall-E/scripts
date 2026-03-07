@@ -15,17 +15,20 @@ logger = get_logger(__name__)
 
 @dataclass
 class PipelineOptions:
-    """Options for run_pipeline (filled from CLI or callers)."""
-    stores_filter: Optional[List[str]] = None
+    """
+    Options for run_pipeline (filled from CLI or callers).
+    See README.md for full config docs; main.py parse_args() maps CLI here.
+    """
+    stores_filter: Optional[List[str]] = None  # None = all stores
     headless: bool = True
-    dump_urls: bool = False
-    disable_fetch_clothing_items: bool = False
-    category: Optional[str] = None
+    dump_urls: bool = False  # --dump-store-urls: write discovered URLs to debug/
+    disable_fetch_clothing_items: bool = False  # discovery only, no scraping
+    category: Optional[str] = None  # e.g. "Womens/Bottoms/Jeans"; skip discovery, scrape only this
     output_json: bool = False
-    dump_item_html: bool = False
-    max_urls_per_shop: Optional[int] = None
+    dump_item_html: bool = False  # save listing page HTML to debug/ for parser development
+    max_urls_per_shop: Optional[int] = None  # cap URLs per store (verification/debug)
     store_in_database: bool = False
-    debug_dir: Optional[Path] = None
+    debug_dir: Optional[Path] = None  # where to write dump_store_urls / dump_item_html
 
 
 @dataclass

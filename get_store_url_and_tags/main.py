@@ -3,13 +3,17 @@
 Store Category URL Discovery and Tagging System
 
 Discovers category URLs from clothing store websites and auto-generates
-tags for use by the clothing item scraper.
+tags for use by the clothing item scraper. Optionally scrapes product
+listings from those URLs using per-store parsers (scrapers).
 
-Usage (run from repo root so scripts/ is on PYTHONPATH, or install the package):
+Usage (run from repo root so scripts/ is on PYTHONPATH):
     PYTHONPATH=scripts python -m get_store_url_and_tags
-    python -m get_store_url_and_tags --stores Abercrombie
-    python -m get_store_url_and_tags --dry-run
-    python -m get_store_url_and_tags --headless=false
+    PYTHONPATH=scripts python -m get_store_url_and_tags --stores Abercrombie
+    PYTHONPATH=scripts python -m get_store_url_and_tags --disable-fetch-clothing-items  # discovery only
+    PYTHONPATH=scripts python -m get_store_url_and_tags --headless=false
+    PYTHONPATH=scripts python -m get_store_url_and_tags --dump-store-urls --max-urls-per-shop 2  # verify stores
+
+See README.md for full docs: config options, adding stores, scrapers (parsers), and debug options.
 """
 
 import argparse
@@ -47,76 +51,73 @@ Examples:
         """
     )
 
+    # --- Store selection and config ---
     parser.add_argument(
         "--stores",
         type=str,
         default=None,
         help="Comma-separated list of store names to process (default: all)"
     )
-
     parser.add_argument(
         "--config",
         type=str,
         default=None,
-        help="Path to stores.json config file (default: built-in)"
+        help="Path to stores.json config file (default: config/stores.json)"
     )
 
+    # --- Debug / verification (see README §5) ---
     parser.add_argument(
         "--dump-store-urls",
         action="store_true",
-        help="Dump discovered store URLs to the debug folder"
+        help="Dump discovered category URLs to debug/<store>_urls_<timestamp>.json"
+    )
+    parser.add_argument(
+        "--max-urls-per-shop",
+        type=int,
+        default=None,
+        help="Cap category URLs scraped per store (for quick verification; e.g. 2)"
+    )
+    parser.add_argument(
+        "--dump-item-html",
+        action="store_true",
+        help="Save product listing HTML to debug/<safe_url>-dump.html for writing new parsers"
     )
 
+    # --- Browser and pipeline ---
     parser.add_argument(
         "--headless",
         type=str,
         default="true",
         choices=["true", "false"],
-        help="Run browser in headless mode (default: true)"
+        help="Run browser headless (default: true); use false if site has bot checks"
     )
-
     parser.add_argument(
         "--disable-fetch-clothing-items",
         action="store_true",
-        help="Disable auto-fetching of clothing items after URL discovery"
+        help="Run discovery only; do not scrape product listings"
     )
-
     parser.add_argument(
         "--category",
         type=str,
         default=None,
-        help="Skip discovery and only fetch clothing items for this category path (e.g., 'Womens/Bottoms/Jeans')"
+        help="Skip discovery; only fetch items for this category path (e.g. Womens/Bottoms/Jeans)"
     )
 
+    # --- Output ---
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Output scraped products in JSON format"
+        help="Emit scraped products as JSON to stdout"
     )
-
-    parser.add_argument(
-        "--dump-item-html",
-        action="store_true",
-        help="Dump product page HTML to debug/<safe_url>-dump.html for parser creation"
-    )
-
-    parser.add_argument(
-        "--max-urls-per-shop",
-        type=int,
-        default=None,
-        help="Maximum number of URLs to scrape per shop (for debugging)"
-    )
-
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
-        help="Enable verbose logging"
+        help="Enable verbose (DEBUG) logging"
     )
-
     parser.add_argument(
         "--store-in-database",
         action="store_true",
-        help="Persist scraped products to the configured storage backend (e.g. Firestore)"
+        help="Persist scraped products to storage backend (e.g. Firestore)"
     )
 
     return parser.parse_args()

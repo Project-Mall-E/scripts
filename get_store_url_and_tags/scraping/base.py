@@ -1,3 +1,7 @@
+"""
+Base scraper for product listing pages. Subclass and implement parse_html().
+Use --dump-item-html to save page HTML to debug/ when writing a new parser.
+"""
 import asyncio
 from typing import List
 from bs4 import BeautifulSoup
@@ -7,15 +11,18 @@ from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class BaseScraper:
+    """Base class for per-store product listing parsers. Subclasses must implement parse_html()."""
+
     def __init__(self, store_name: str):
         self.store_name = store_name
-        self.base_url = ""
+        self.base_url = ""  # e.g. https://www.ae.com for resolving relative links
 
     async def scrape(self, page: Page, url: str, tags: list[str], dump_html: bool = False) -> List[Product]:
         """
-        Navigates to the URL, waits for products to load, 
-        and parses the HTML into Product objects.
+        Navigate to the category URL, wait for content, then parse HTML into Product list.
+        If dump_html is True, saves HTML to debug/<safe_url>-dump.html for parser development.
         """
         logger.info(f"[{self.store_name}] Navigating to {url} ...")
         
@@ -47,5 +54,8 @@ class BaseScraper:
             return []
 
     def parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]:
-        """must be implemented by subclasses"""
+        """
+        Parse product listing HTML into Product objects. Implement in each store scraper.
+        tags are the category tags (e.g. from breadcrumbs) to attach to each product.
+        """
         raise NotImplementedError

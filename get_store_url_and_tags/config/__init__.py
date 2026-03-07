@@ -10,16 +10,16 @@ from ..models import StoreDefinition
 
 @dataclass
 class Settings:
-    """Global settings for the discovery system."""
-    rate_limit_seconds: float = 2.0
+    """Global settings for the discovery system (from config JSON "settings" block)."""
+    rate_limit_seconds: float = 2.0  # delay between requests (link crawler)
     max_retries: int = 3
     request_timeout_seconds: float = 30.0
-    max_crawl_depth: int = 2
+    max_crawl_depth: int = 2  # link crawler max depth
 
 
 @dataclass
 class Config:
-    """Configuration container for the discovery system."""
+    """Configuration container: list of stores + global settings. See README §2."""
     stores: List[StoreDefinition]
     settings: Settings
 
