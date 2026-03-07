@@ -5,14 +5,18 @@ This package discovers category URLs from clothing store websites
 and auto-generates tags for use by the clothing item scraper.
 """
 
+from .config import Config, load_config
+from .models import DiscoveredURL, Product, StoreDefinition, StoreLink
 from .orchestrator import DiscoveryOrchestrator
-from .config import load_config, Config
-from .discovery.stores_links import StoreLink
 
+# Backward compat: StoreLink was previously from discovery.stores_links
 __all__ = [
+    "Config",
+    "DiscoveredURL",
     "DiscoveryOrchestrator",
     "load_config",
-    "Config",
+    "Product",
+    "StoreDefinition",
     "StoreLink",
 ]
 

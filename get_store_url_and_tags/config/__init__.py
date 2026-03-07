@@ -1,9 +1,11 @@
+"""Configuration loading. Depends only on models."""
+
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from ..discovery.base import StoreDefinition
+from ..models import StoreDefinition
 
 
 @dataclass
@@ -25,10 +27,10 @@ class Config:
 def load_config(config_path: Optional[str] = None) -> Config:
     """
     Load configuration from JSON file.
-    
+
     Args:
         config_path: Path to config file, or None to use default
-        
+
     Returns:
         Loaded Config object
     """
@@ -36,10 +38,10 @@ def load_config(config_path: Optional[str] = None) -> Config:
         config_path = Path(__file__).parent / "stores.json"
     else:
         config_path = Path(config_path)
-    
+
     with open(config_path, "r") as f:
         data = json.load(f)
-    
+
     stores = [
         StoreDefinition(
             name=s["name"],
@@ -52,7 +54,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
         )
         for s in data.get("stores", [])
     ]
-    
+
     settings_data = data.get("settings", {})
     settings = Settings(
         rate_limit_seconds=settings_data.get("rate_limit_seconds", 2.0),
@@ -60,14 +62,14 @@ def load_config(config_path: Optional[str] = None) -> Config:
         request_timeout_seconds=settings_data.get("request_timeout_seconds", 30.0),
         max_crawl_depth=settings_data.get("max_crawl_depth", 2),
     )
-    
+
     return Config(stores=stores, settings=settings)
 
 
 def save_config(config: Config, config_path: str) -> None:
     """
     Save configuration to JSON file.
-    
+
     Args:
         config: Config object to save
         config_path: Path to save to
@@ -89,6 +91,6 @@ def save_config(config: Config, config_path: str) -> None:
             "max_crawl_depth": config.settings.max_crawl_depth,
         }
     }
-    
+
     with open(config_path, "w") as f:
         json.dump(data, f, indent=2)

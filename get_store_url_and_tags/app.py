@@ -1,0 +1,105 @@
+"""High-level pipeline: discovery -> optional scraping -> optional storage. Used by main."""
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional
+
+from .config import Config, load_config
+from .models import Product, StoreLink
+from .orchestrator import DiscoveryOrchestrator
+from .output import dump_discovered_urls, emit_discovery_summary, emit_products
+from .utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class PipelineOptions:
+    """Options for run_pipeline (filled from CLI or callers)."""
+    stores_filter: Optional[List[str]] = None
+    headless: bool = True
+    dump_urls: bool = False
+    disable_fetch_clothing_items: bool = False
+    category: Optional[str] = None
+    output_json: bool = False
+    dump_item_html: bool = False
+    max_urls_per_shop: Optional[int] = None
+    store_in_database: bool = False
+    debug_dir: Optional[Path] = None
+
+
+@dataclass
+class PipelineResult:
+    """Result of run_pipeline."""
+    entries: List[StoreLink] = field(default_factory=list)
+    products: Optional[List[Product]] = None
+
+    @property
+    def success(self) -> bool:
+        return True  # Caller uses exceptions for failure
+
+
+async def run_pipeline(
+    config: Config,
+    options: PipelineOptions,
+) -> PipelineResult:
+    """
+    Run discovery, optional category filter, optional dump, optional scraping, optional storage.
+    Returns PipelineResult(entries, products). Does not emit to stdout; caller calls output.emit_*.
+    """
+    if options.debug_dir is None:
+        options.debug_dir = Path(__file__).resolve().parent / "debug"
+
+    orchestrator = DiscoveryOrchestrator(config=config, headless=options.headless)
+    try:
+        entries = await orchestrator.run(stores=options.stores_filter)
+    finally:
+        await orchestrator.close()
+
+    if options.category:
+        category_tags = options.category.split("/")
+        entries = [e for e in entries if e.tags == category_tags]
+        if not entries:
+            raise ValueError(
+                f"Category '{options.category}' not found or filtered out after discovery."
+            )
+        logger.info(
+            "Filtered down to %d matching entries for category '%s'.",
+            len(entries),
+            options.category,
+        )
+
+    emit_discovery_summary(entries)
+
+    if options.dump_urls and entries:
+        dump_discovered_urls(entries, options.debug_dir)
+
+    products: Optional[List[Product]] = None
+    if entries and not options.disable_fetch_clothing_items:
+        from .scraping.orchestrator import ScrapingOrchestrator
+
+        logger.info("Starting Product Scraping")
+        scraping_orchestrator = ScrapingOrchestrator(
+            headless=options.headless,
+            dump_item_html=options.dump_item_html,
+        )
+        products = await scraping_orchestrator.run(
+            entries,
+            max_urls_per_shop=options.max_urls_per_shop,
+        )
+
+        if options.store_in_database and products:
+            provider = _get_storage_provider()
+            for p in products:
+                try:
+                    provider.upsert(p)
+                except Exception as e:
+                    logger.error("Failed to persist product %s: %s", p.item_link, e)
+
+    return PipelineResult(entries=entries, products=products)
+
+
+def _get_storage_provider():
+    """Return the configured storage provider (e.g. Firestore). Used when store_in_database is True."""
+    from .storage import FirestoreStorageProvider
+    return FirestoreStorageProvider()

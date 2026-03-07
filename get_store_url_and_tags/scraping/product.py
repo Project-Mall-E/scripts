@@ -1,10 +1,5 @@
-from dataclasses import dataclass
+"""Backward-compat re-export. Prefer: from get_store_url_and_tags.models import Product."""
 
-@dataclass
-class Product:
-    store: str
-    item_name: str
-    item_image_link: str
-    item_link: str
-    price: str
-    tags: list[str]
+from ..models import Product
+
+__all__ = ["Product"]
