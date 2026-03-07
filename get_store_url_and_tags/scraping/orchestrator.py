@@ -3,7 +3,7 @@ from typing import List, Optional
 from playwright.async_api import async_playwright
 from .scrapers import get_scraper_for_store
 from .product import Product
-from ..writer import StoreConfigEntry
+from ..discovery.stores_links import StoreLink
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -16,7 +16,7 @@ class ScrapingOrchestrator:
         self.headless = headless
         self.dump_item_html = dump_item_html
 
-    async def run(self, entries: List[StoreConfigEntry], max_urls_per_shop: Optional[int] = None) -> List[Product]:
+    async def run(self, entries: List[StoreLink], max_urls_per_shop: Optional[int] = None) -> List[Product]:
         """
         Scrape products for the given store entries.
         """

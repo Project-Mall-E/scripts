@@ -10,7 +10,7 @@ from .filters.robots_checker import RobotsChecker
 from .filters.url_classifier import URLClassifier
 from .tagging.rules import TagExtractor
 from .tagging.normalizer import TagNormalizer
-from .writer import StoreConfigWriter, StoreConfigEntry
+from .discovery.stores_links import StoreLink
 from .utils.logger import get_logger, setup_logging
 from .utils.rate_limiter import RateLimiter
 
@@ -40,7 +40,6 @@ class DiscoveryOrchestrator:
         )
         self.tag_extractor = TagExtractor()
         self.tag_normalizer = TagNormalizer()
-        self.writer = StoreConfigWriter()
         
         self._sitemap_discovery = SitemapDiscovery(
             timeout=self.config.settings.request_timeout_seconds
@@ -149,7 +148,7 @@ class DiscoveryOrchestrator:
     def _tag_urls(
         self,
         urls: List[DiscoveredURL]
-    ) -> List[StoreConfigEntry]:
+    ) -> List[StoreLink]:
         """Extract and normalize tags for discovered URLs."""
         entries = []
         
@@ -164,7 +163,7 @@ class DiscoveryOrchestrator:
             normalized_tags = self.tag_normalizer.normalize(raw_tags)
             
             if normalized_tags:
-                entries.append(StoreConfigEntry(
+                entries.append(StoreLink(
                     name=url.store_name,
                     url=url.url,
                     tags=normalized_tags
@@ -177,14 +176,14 @@ class DiscoveryOrchestrator:
     async def run(
         self,
         stores: List[str] = None,
-        dry_run: bool = False
-    ) -> List[StoreConfigEntry]:
+        dump_urls: bool = False
+    ) -> List[StoreLink]:
         """
         Run the full discovery pipeline.
         
         Args:
             stores: List of store names to process (None = all)
-            dry_run: If True, don't write to file
+            dump_urls: If True, write discovered URLs to debug folder
             
         Returns:
             List of discovered and tagged entries
@@ -221,14 +220,28 @@ class DiscoveryOrchestrator:
         entries = self._tag_urls(unique_urls)
         logger.info(f"Tagged {len(entries)} URLs")
         
-        if not dry_run and entries:
-            self.writer.write(entries, merge_existing=True)
-        elif dry_run:
-            logger.info("Dry run - not writing to file")
-            for entry in entries[:10]:
-                logger.info(f"  {entry.name}: {entry.url} -> {entry.tags}")
-            if len(entries) > 10:
-                logger.info(f"  ... and {len(entries) - 10} more")
+        if dump_urls and entries:
+            import json
+            from pathlib import Path
+            import time
+            from dataclasses import asdict
+            
+            debug_dir = Path(__file__).parent / "debug"
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Group by store
+            by_store = {}
+            for entry in entries:
+                if entry.name not in by_store:
+                    by_store[entry.name] = []
+                by_store[entry.name].append(asdict(entry))
+                
+            for store_name, store_urls in by_store.items():
+                timestamp = int(time.time())
+                debug_file = debug_dir / f"{store_name.lower().replace(' ', '_')}_urls_{timestamp}.json"
+                with open(debug_file, "w") as f:
+                    json.dump(store_urls, f, indent=2)
+                logger.info(f"Dumped {len(store_urls)} URLs for {store_name} to {debug_file}")
         
         return entries
     

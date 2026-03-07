@@ -38,7 +38,7 @@ Examples:
     %(prog)s                           Process all configured stores
     %(prog)s --stores Abercrombie      Process only Abercrombie
     %(prog)s --stores "A,B"            Process stores A and B
-    %(prog)s --dry-run                 Preview results without writing
+    %(prog)s --dump-store-urls         Dump discovered URLs to debug/
     %(prog)s --config ./my-stores.json Use custom config file
         """
     )
@@ -58,9 +58,9 @@ Examples:
     )
     
     parser.add_argument(
-        "--dry-run",
+        "--dump-store-urls",
         action="store_true",
-        help="Preview discovered URLs without writing to store_config.py"
+        help="Dump discovered store URLs to the debug folder"
     )
     
     parser.add_argument(
@@ -140,74 +140,48 @@ async def main() -> int:
     
     headless = args.headless.lower() == "true"
     
-    entries = []
-    if args.category:
-        try:
-            import importlib.util
-            store_config_path = Path(__file__).parent / "config" / "store_config.py"
-            spec = importlib.util.spec_from_file_location("store_config", store_config_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            
-            category_tags = args.category.split("/")
-            stores_to_scrape = [
-                c for c in module.STORE_CONFIG 
-                if c.tags == category_tags
-            ]
-            
-            if stores_filter:
-                stores_to_scrape = [c for c in stores_to_scrape if c.name in stores_filter]
-                
-            from get_store_url_and_tags.writer import StoreConfigEntry
-            entries = [StoreConfigEntry(name=c.name, url=c.url, tags=list(c.tags)) for c in stores_to_scrape]
-        except Exception as e:
-            logger.error(f"Failed to load configured categories: {e}")
-            return 1
-            
-        if not entries:
-            logger.error(f"Category '{args.category}' not found or filtered out.")
-            return 1
-            
-        logger.info(f"Loaded {len(entries)} matching entries for category '{args.category}'. Skipping discovery.")
-    else:
-        orchestrator = DiscoveryOrchestrator(
-            config=config,
-            headless=headless
+    orchestrator = DiscoveryOrchestrator(
+        config=config,
+        headless=headless
+    )
+    
+    try:
+        entries = await orchestrator.run(
+            stores=stores_filter,
+            dump_urls=args.dump_store_urls
         )
         
-        try:
-            entries = await orchestrator.run(
-                stores=stores_filter,
-                dry_run=args.dry_run
-            )
+        if args.category:
+            category_tags = args.category.split("/")
+            entries = [e for e in entries if e.tags == category_tags]
             
-            logger.info("=" * 60)
-            logger.info(f"Discovery complete!")
-            logger.info(f"  Total URLs discovered: {len(entries)}")
+            if not entries:
+                logger.error(f"Category '{args.category}' not found or filtered out after discovery.")
+                return 1
             
-            if entries:
-                stores_found = set(e.name for e in entries)
-                logger.info(f"  Stores: {', '.join(sorted(stores_found))}")
-                
-                all_tags = set()
-                for e in entries:
-                    all_tags.update(e.tags)
-                logger.info(f"  Unique tags: {len(all_tags)}")
+            logger.info(f"Filtered down to {len(entries)} matching entries for category '{args.category}'.")
+        
+        logger.info("=" * 60)
+        logger.info(f"Discovery complete!")
+        logger.info(f"  Total URLs matching criteria: {len(entries)}")
+        
+        if entries:
+            stores_found = set(e.name for e in entries)
+            logger.info(f"  Stores: {', '.join(sorted(stores_found))}")
             
-            if args.dry_run:
-                logger.info("  (Dry run - no files modified)")
-            else:
-                output_path = Path(__file__).parent / "config" / "store_config.py"
-                logger.info(f"  Output: {output_path}")
-                
-        except KeyboardInterrupt:
-            logger.info("\nInterrupted by user")
-            return 130
-        except Exception as e:
-            logger.error(f"Discovery failed: {e}", exc_info=True)
-            return 1
-        finally:
-            await orchestrator.close()
+            all_tags = set()
+            for e in entries:
+                all_tags.update(e.tags)
+            logger.info(f"  Unique tags: {len(all_tags)}")
+            
+    except KeyboardInterrupt:
+        logger.info("\nInterrupted by user")
+        return 130
+    except Exception as e:
+        logger.error(f"Discovery failed: {e}", exc_info=True)
+        return 1
+    finally:
+        await orchestrator.close()
 
     if entries and not args.disable_fetch_clothing_items:
         from get_store_url_and_tags.scraping.orchestrator import ScrapingOrchestrator

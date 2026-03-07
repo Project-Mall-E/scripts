@@ -3,7 +3,7 @@
 # Debug Files
 debug/
 logs/
-
+secrets/
 # Python Defaults 
 
 # Byte-compiled / optimized / DLL files
