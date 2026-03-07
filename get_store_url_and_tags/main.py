@@ -108,7 +108,13 @@ Examples:
         action="store_true",
         help="Enable verbose logging"
     )
-    
+
+    parser.add_argument(
+        "--store-in-database",
+        action="store_true",
+        help="Persist scraped products to the configured storage backend (e.g. Firestore)"
+    )
+
     return parser.parse_args()
 
 
@@ -195,7 +201,16 @@ async def main() -> int:
         try:
             scraping_orchestrator = ScrapingOrchestrator(headless=headless, dump_item_html=args.dump_item_html)
             products = await scraping_orchestrator.run(entries, max_urls_per_shop=args.max_urls_per_shop)
-            
+
+            if args.store_in_database and products:
+                from get_store_url_and_tags.storage import FirestoreStorageProvider
+                provider = FirestoreStorageProvider()
+                for p in products:
+                    try:
+                        provider.upsert(p)
+                    except Exception as e:
+                        logger.error("Failed to persist product %s: %s", p.item_link, e)
+
             if not products:
                 logger.info("No products found.")
             elif args.json:
@@ -203,7 +218,6 @@ async def main() -> int:
             else:
                 print(f"\nFound {len(products)} total products:\n")
                 print("-" * 80)
-                # TODO - Firebase Upload
                 for p in products:
                     print(f"Store: {p.store:<15} | Price: {p.price:<10} | Name: {p.item_name}")
                     print(f"Link : {p.item_link}")
