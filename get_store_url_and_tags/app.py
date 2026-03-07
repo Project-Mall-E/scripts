@@ -53,11 +53,13 @@ async def run_pipeline(
     if options.debug_dir is None:
         options.debug_dir = Path(__file__).resolve().parent / "debug"
 
+    logger.info("Discovery phase starting ...")
     orchestrator = DiscoveryOrchestrator(config=config, headless=options.headless)
     try:
         entries = await orchestrator.run(stores=options.stores_filter)
     finally:
         await orchestrator.close()
+    logger.info("Discovery phase complete: %d entries", len(entries))
 
     if options.category:
         category_tags = options.category.split("/")
@@ -81,7 +83,7 @@ async def run_pipeline(
     if entries and not options.disable_fetch_clothing_items:
         from .scraping.orchestrator import ScrapingOrchestrator
 
-        logger.info("Starting Product Scraping")
+        logger.info("Scraping phase starting (fetching pages and parsing) ...")
         scraping_orchestrator = ScrapingOrchestrator(
             headless=options.headless,
             dump_item_html=options.dump_item_html,

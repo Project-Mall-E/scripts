@@ -35,8 +35,10 @@ class BaseScraper:
                 await page.mouse.wheel(0, 500)
                 await asyncio.sleep(1)
                 
+            logger.info(f"[{self.store_name}] Fetching page content ...")
             html = await page.content()
-            
+            logger.info(f"[{self.store_name}] Content received (%d bytes), parsing HTML ...", len(html))
+
             if dump_html:
                 import urllib.parse
                 from pathlib import Path
@@ -48,7 +50,10 @@ class BaseScraper:
                 logger.info(f"[{self.store_name}] Dumped HTML to {dump_path}")
 
             soup = BeautifulSoup(html, "html.parser")
-            return self.parse_html(soup, tags)
+            logger.info(f"[{self.store_name}] Calling parse_html ...")
+            products = self.parse_html(soup, tags)
+            logger.info(f"[{self.store_name}] parse_html returned %d products", len(products))
+            return products
         except Exception as e:
             logger.error(f"[{self.store_name}] Failed to scrape {url}: {e}")
             return []
