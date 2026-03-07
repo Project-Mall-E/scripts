@@ -1,3 +1,11 @@
+# Project Specific Files 
+
+# Debug Files
+debug/
+logs/
+
+# Python Defaults 
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

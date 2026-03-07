@@ -1,10 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Set, Tuple
-import sys
-import os
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'get_clothing_items')))
 
 from .utils.logger import get_logger
 
@@ -36,7 +32,7 @@ class StoreConfigWriter:
     
     def __init__(self, output_path: str = None):
         if output_path is None:
-            output_path = Path(__file__).parent.parent / "get_clothing_items" / "store_config.py"
+            output_path = Path(__file__).parent / "config" / "store_config.py"
         self.output_path = Path(output_path)
     
     def _load_existing_entries(self) -> List[StoreConfigEntry]:

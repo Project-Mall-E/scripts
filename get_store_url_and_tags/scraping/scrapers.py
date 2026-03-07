@@ -1,56 +1,14 @@
-import argparse
-import asyncio
-import json
-import time
-from dataclasses import asdict, dataclass
 from typing import List
-
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
-
-from store_config import StoreConfig, STORE_CONFIG
-
-# --- Scraper Architecture ---
-
-class BaseScraper:
-    def __init__(self, store_name: str):
-        self.store_name = store_name
-        self.base_url = ""
-
-    async def scrape(self, page, url: str) -> List[Product]:
-        """
-        Navigates to the URL, waits for products to load, 
-        and parses the HTML into Product objects.
-        """
-        print(f"[{self.store_name}] Navigating to {url} ...")
-        
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            print(f"[{self.store_name}] Page loaded. Waiting for any bot checks to complete...")
-            time.sleep(5)
-            # Add some scrolling to seem human
-            for _ in range(3):
-                await page.mouse.wheel(0, 500)
-                time.sleep(1)
-                
-            html = await page.content()
-            soup = BeautifulSoup(html, "html.parser")
-            return self.parse_html(soup)
-        except Exception as e:
-            print(f"[{self.store_name}] Failed to scrape: {e}")
-            return []
-
-    def parse_html(self, soup: BeautifulSoup) -> List[Product]:
-        """must be implemented by subclasses"""
-        raise NotImplementedError
-
+from .base import BaseScraper
+from .product import Product
 
 class AbercrombieScraper(BaseScraper):
     def __init__(self):
         super().__init__("Abercrombie")
         self.base_url = "https://www.abercrombie.com"
 
-    def parse_html(self, soup: BeautifulSoup) -> List[Product]:
+    def parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]:
         products = []
         cards = soup.find_all("li", class_=lambda c: c and 'productCard-module__productCard' in c)
         
@@ -102,7 +60,8 @@ class AbercrombieScraper(BaseScraper):
                     item_name=name,
                     item_image_link=img,
                     item_link=link,
-                    price=price
+                    price=price,
+                    tags=tags
                 ))
         return products
 
@@ -111,7 +70,7 @@ class AmericanEagleScraper(BaseScraper):
         super().__init__("AmericanEagle")
         self.base_url = "https://www.ae.com"
 
-    def parse_html(self, soup: BeautifulSoup) -> List[Product]:
+    def parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]:
         products = []
         cards = soup.find_all("div", attrs={"data-qa": "product-card"})
         if not cards:
@@ -122,7 +81,13 @@ class AmericanEagleScraper(BaseScraper):
             
             price_elem = card.find("div", attrs={"data-qa": "price"})
             if not price_elem:
+                price_elem = card.find(attrs={"data-testid": "sale-price"})
+            if not price_elem:
+                price_elem = card.find(attrs={"data-testid": "list-price"})
+            if not price_elem:
                 price_elem = card.find("span", class_=lambda c: c and 'price' in c.lower())
+            if not price_elem:
+                price_elem = card.find("div", class_=lambda c: c and 'price' in c.lower())
                 
             link_elem = card.find("a")
             img_elem = card.find("img")
@@ -145,7 +110,8 @@ class AmericanEagleScraper(BaseScraper):
                     item_name=name,
                     item_image_link=img,
                     item_link=link,
-                    price=price
+                    price=price,
+                    tags=tags
                 ))
         return products
 
@@ -155,91 +121,5 @@ def get_scraper_for_store(store_name: str) -> BaseScraper:
     elif store_name == "AmericanEagle":
         return AmericanEagleScraper()
     else:
-        raise ValueError(f"Unknown store: {store_name}")
-
-
-# --- Main Application Logic ---
-
-async def get_products_by_category(category_path: str) -> List[Product]:
-    category_tags = category_path.split("/")
-    
-    stores_to_scrape = [
-        config for config in STORE_CONFIG 
-        if config.tags == category_tags
-    ]
-
-    if not stores_to_scrape:
-        print(f"Error: Category '{category_path}' not found in configuration.")
-        print("Available categories:")
-        seen_paths = set()
-        for config in STORE_CONFIG:
-            path = "/".join(config.tags)
-            if path not in seen_paths:
-                print(f"  - {path}")
-                seen_paths.add(path)
-        return []
-
-    all_products = []
-
-    async with async_playwright() as p:
-        # NOTE: Using headless=False is often required for bot protection (like Akamai on Abercrombie)
-        browser = await p.chromium.launch(headless=False)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            viewport={'width': 1920, 'height': 1080},
-        )
-        page = await context.new_page()
-        
-        # Inject stealth properties to avoid WebDriver detection
-        await page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            })
-        """)
-
-        for store_config in stores_to_scrape:
-            scraper = get_scraper_for_store(store_config.name)
-            products = await scraper.scrape(page, store_config.url)
-            all_products.extend(products)
-
-        await browser.close()
-
-    return all_products
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Multi-Store Product Scraper")
-    parser.add_argument(
-        "category", 
-        type=str, 
-        help="The category path to scrape (e.g., 'Womens/Bottoms/Jeans')"
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Output the results in JSON format"
-    )
-
-    args = parser.parse_args()
-    
-    products = asyncio.run(get_products_by_category(args.category))
-    
-    if not products:
-        print("No products found or error occurred.")
-        return
-
-    if args.json:
-        # Dump as JSON array
-        print(json.dumps([asdict(p) for p in products], indent=2))
-    else:
-        print(f"\nFound {len(products)} total products:\n")
-        print("-" * 80)
-        for p in products:
-            print(f"Store: {p.store:<15} | Price: {p.price:<10} | Name: {p.item_name}")
-            print(f"Link : {p.item_link}")
-            print(f"Image: {p.item_image_link}")
-            print("-" * 80)
-
-
-if __name__ == "__main__":
-    main()
+        # We don't have scrapers for all stores yet. Return a generic or ignore.
+        return None
