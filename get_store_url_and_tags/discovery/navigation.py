@@ -41,12 +41,16 @@ class NavigationDiscovery(DiscoveryStrategy):
         self,
         headless: bool = True,
         timeout: float = 30000,
-        wait_for_nav: float = 3.0,
+        wait_for_nav: float = 1.5,
+        hover_delay_seconds: float = 0.2,
+        post_hover_seconds: float = 0.5,
         classifier: URLClassifier = None
     ):
         self.headless = headless
         self.timeout = timeout
         self.wait_for_nav = wait_for_nav
+        self.hover_delay_seconds = hover_delay_seconds
+        self.post_hover_seconds = post_hover_seconds
         self.classifier = classifier or URLClassifier()
         self._browser: Optional[Browser] = None
         self._playwright = None
@@ -129,7 +133,7 @@ class NavigationDiscovery(DiscoveryStrategy):
                 for item in items[:10]:
                     try:
                         await item.hover()
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(self.hover_delay_seconds)
                     except Exception:
                         continue
             except Exception:
@@ -170,7 +174,7 @@ class NavigationDiscovery(DiscoveryStrategy):
             await asyncio.sleep(self.wait_for_nav)
             
             await self._hover_nav_menus(page)
-            await asyncio.sleep(1)
+            await asyncio.sleep(self.post_hover_seconds)
             
             links = await self._extract_nav_links(page, store)
             logger.info(f"[{store.name}] Extracted {len(links)} navigation links")

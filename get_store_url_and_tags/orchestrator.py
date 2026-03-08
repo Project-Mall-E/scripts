@@ -1,5 +1,6 @@
 """Discovery orchestrator: runs strategies and returns tagged StoreLinks via pipeline."""
 
+import asyncio
 from typing import List, Optional
 
 from .config import Config, load_config
@@ -32,7 +33,8 @@ class DiscoveryOrchestrator:
         self.headless = headless
 
         self.rate_limiter = RateLimiter(
-            default_delay=self.config.settings.rate_limit_seconds
+            default_delay=self.config.settings.rate_limit_seconds,
+            jitter_seconds=self.config.settings.rate_limit_jitter,
         )
         self.robots_checker = RobotsChecker(
             timeout=self.config.settings.request_timeout_seconds
@@ -45,12 +47,16 @@ class DiscoveryOrchestrator:
         )
         self._nav_discovery = NavigationDiscovery(
             headless=headless,
-            timeout=self.config.settings.request_timeout_seconds * 1000
+            timeout=self.config.settings.request_timeout_seconds * 1000,
+            wait_for_nav=self.config.settings.navigation_wait_seconds,
+            hover_delay_seconds=self.config.settings.navigation_hover_delay_seconds,
+            post_hover_seconds=self.config.settings.navigation_post_hover_seconds,
         )
         self._link_discovery = LinkCrawlerDiscovery(
             max_depth=self.config.settings.max_crawl_depth,
             headless=headless,
             timeout=self.config.settings.request_timeout_seconds * 1000,
+            post_goto_seconds=self.config.settings.link_crawler_post_goto_seconds,
             rate_limiter=self.rate_limiter,
             robots_checker=self.robots_checker
         )
@@ -107,12 +113,14 @@ class DiscoveryOrchestrator:
     async def run(
         self,
         stores: Optional[List[str]] = None,
+        sequential: bool = False,
     ) -> List[StoreLink]:
         """
         Run discovery for configured stores, then filter/dedupe/tag via pipeline.
 
         Args:
             stores: List of store names to process (None = all)
+            sequential: If True, run one store at a time; otherwise run stores in parallel
 
         Returns:
             List of discovered and tagged StoreLinks (no dump; caller handles output).
@@ -127,16 +135,30 @@ class DiscoveryOrchestrator:
             logger.warning("No stores to process")
             return []
 
-        logger.info("Starting discovery for %d stores", len(stores_to_process))
+        logger.info(
+            "Starting discovery for %d stores (%s)",
+            len(stores_to_process),
+            "sequential" if sequential else "parallel",
+        )
 
         all_discovered: List[DiscoveredURL] = []
-
-        for store in stores_to_process:
-            try:
-                urls = await self._discover_store(store)
-                all_discovered.extend(urls)
-            except Exception as e:
-                logger.error("[%s] Discovery failed: %s", store.name, e, exc_info=True)
+        if sequential:
+            for store in stores_to_process:
+                try:
+                    urls = await self._discover_store(store)
+                    all_discovered.extend(urls)
+                except Exception as e:
+                    logger.error("[%s] Discovery failed: %s", store.name, e, exc_info=True)
+        else:
+            results = await asyncio.gather(
+                *[self._discover_store(store) for store in stores_to_process],
+                return_exceptions=True,
+            )
+            for store, result in zip(stores_to_process, results):
+                if isinstance(result, Exception):
+                    logger.error("[%s] Discovery failed: %s", store.name, result, exc_info=True)
+                else:
+                    all_discovered.extend(result)
 
         entries = await pipeline_process(
             all_discovered,

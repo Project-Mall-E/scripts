@@ -9,6 +9,20 @@ from ..product import Product
 STORE_NAME = "Abercrombie"
 
 
+def _class_contains(classes, substring: str, case_sensitive: bool = True) -> bool:
+    """Match when any class token contains substring (handles BS4 class as list or str)."""
+    if not classes:
+        return False
+    sub = substring if case_sensitive else substring.lower()
+    if isinstance(classes, list):
+        return any(
+            (sub in (c or "")) if case_sensitive else (sub in (c or "").lower())
+            for c in classes
+        )
+    s = classes or ""
+    return sub in s if case_sensitive else sub in s.lower()
+
+
 def _product_name_only(raw: str) -> str:
     """Extract product name by dropping price/promo text (e.g. $14.95, Price After 25% Off)."""
     if not raw or "Activating this element" in raw:
@@ -27,14 +41,25 @@ class AbercrombieScraper(BaseScraper):
         super().__init__(STORE_NAME)
         self.base_url = "https://www.abercrombie.com"
 
+    def content_ready_selector(self) -> str | None:
+        """Catalog is JS-rendered; wait for product cards to appear (testid or class)."""
+        return '[data-testid="catalog-product-card"], li[class*="productCard-module__productCard"]'
+
     def parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]:
         products = []
-        cards = soup.find_all("li", class_=lambda c: c and 'productCard-module__productCard' in c)
+        # Prefer stable data-testid; fall back to li with productCard class (handles prefixed classes)
+        cards = soup.find_all(attrs={"data-testid": "catalog-product-card"})
+        if not cards:
+            cards = soup.find_all("li", class_=lambda c: _class_contains(c, "productCard-module__productCard"))
 
         for card in cards:
             name = None
-            # Prefer elements that contain only the product name (not the whole card link text).
-            name_el = card.find("h2") or card.find(class_=lambda c: c and "product-name" in (c or ""))
+            # Prefer data-testid (stable); then h2; then class product-name
+            name_el = (
+                card.find(attrs={"data-testid": "catalog-product-card-name"})
+                or card.find("h2")
+                or card.find(class_=lambda c: _class_contains(c, "product-name"))
+            )
             if name_el:
                 name = name_el.get_text(strip=True)
             # Reject accessibility/screen-reader placeholder text from any source
@@ -46,7 +71,7 @@ class AbercrombieScraper(BaseScraper):
                     name = _product_name_only(el.get_text())
             # Fallback: use the product link's text (one get_text instead of iterating all <a>).
             if not name:
-                _link = card.find("a", class_=lambda c: c and "link" in (c or "").lower()) or card.find("a")
+                _link = card.find("a", class_=lambda c: _class_contains(c, "link", case_sensitive=False)) or card.find("a")
                 if _link:
                     _raw = _product_name_only(_link.get_text())
                     if _raw and len(_raw) > 3:
@@ -56,11 +81,13 @@ class AbercrombieScraper(BaseScraper):
             name = name.replace("New!", "")
 
 
-            price_elem = card.find("span", class_=lambda c: c and "price" in (c or "").lower() and "original" not in (c or "").lower() and "discount" not in (c or "").lower())
+            price_elem = card.find(attrs={"data-testid": "product-price"})
+            if not price_elem:
+                price_elem = card.find("span", class_=lambda c: _class_contains(c, "price", case_sensitive=False) and not _class_contains(c, "original") and not _class_contains(c, "discount"))
             if not price_elem:
                 price_elem = card.find(lambda tag: tag.has_attr("data-cmp") and "price" in (tag.get("data-cmp") or "").lower())
 
-            link_elem = card.find("a", class_=lambda c: c and "link" in (c or "").lower())
+            link_elem = card.find("a", class_=lambda c: _class_contains(c, "link", case_sensitive=False))
             if not link_elem:
                 link_elem = card.find("a")
 

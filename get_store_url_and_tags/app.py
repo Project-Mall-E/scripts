@@ -23,6 +23,7 @@ class PipelineOptions:
     headless: bool = True
     dump_urls: bool = False  # --dump-store-urls: write discovered URLs to debug/
     disable_fetch_clothing_items: bool = False  # discovery only, no scraping
+    sequential: bool = False  # --sequential: run discovery and scraping one store at a time
     category: Optional[str] = None  # e.g. "Womens/Bottoms/Jeans"; skip discovery, scrape only this
     output_json: bool = False
     dump_item_html: bool = False  # save listing page HTML to debug/ for parser development
@@ -56,7 +57,7 @@ async def run_pipeline(
     logger.info("Discovery phase starting ...")
     orchestrator = DiscoveryOrchestrator(config=config, headless=options.headless)
     try:
-        entries = await orchestrator.run(stores=options.stores_filter)
+        entries = await orchestrator.run(stores=options.stores_filter, sequential=options.sequential)
     finally:
         await orchestrator.close()
     logger.info("Discovery phase complete: %d entries", len(entries))
@@ -83,14 +84,19 @@ async def run_pipeline(
     if entries and not options.disable_fetch_clothing_items:
         from .scraping.orchestrator import ScrapingOrchestrator
 
-        logger.info("Scraping phase starting (fetching pages and parsing) ...")
+        logger.info(
+            "Scraping phase starting (%s) ...",
+            "sequential (one store at a time)" if options.sequential else "parallel per store",
+        )
         scraping_orchestrator = ScrapingOrchestrator(
             headless=options.headless,
             dump_item_html=options.dump_item_html,
+            settings=config.settings,
         )
         products = await scraping_orchestrator.run(
             entries,
             max_urls_per_shop=options.max_urls_per_shop,
+            sequential=options.sequential,
         )
 
         if options.store_in_database and products:

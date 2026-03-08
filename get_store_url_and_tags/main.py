@@ -48,6 +48,7 @@ Examples:
     %(prog)s --stores "A,B"            Process stores A and B
     %(prog)s --dump-store-urls         Dump discovered store URLs to debug/
     %(prog)s --config ./my-stores.json Use custom config file
+    %(prog)s --sequential               Run one store at a time (no parallel)
         """
     )
 
@@ -97,6 +98,11 @@ Examples:
         help="Run discovery only; do not scrape product listings"
     )
     parser.add_argument(
+        "--sequential",
+        action="store_true",
+        help="Run discovery and scraping one store at a time (no parallel stores)"
+    )
+    parser.add_argument(
         "--category",
         type=str,
         default=None,
@@ -134,6 +140,7 @@ def args_to_options(args: argparse.Namespace) -> PipelineOptions:
         headless=args.headless.lower() == "true",
         dump_urls=args.dump_store_urls,
         disable_fetch_clothing_items=args.disable_fetch_clothing_items,
+        sequential=args.sequential,
         category=args.category,
         output_json=args.json,
         dump_item_html=args.dump_item_html,

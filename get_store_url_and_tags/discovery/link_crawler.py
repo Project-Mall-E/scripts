@@ -29,6 +29,7 @@ class LinkCrawlerDiscovery(DiscoveryStrategy):
         max_pages: int = 50,
         headless: bool = True,
         timeout: float = 30000,
+        post_goto_seconds: float = 0.5,
         rate_limiter: RateLimiter = None,
         robots_checker: RobotsChecker = None,
         classifier: URLClassifier = None
@@ -37,6 +38,7 @@ class LinkCrawlerDiscovery(DiscoveryStrategy):
         self.max_pages = max_pages
         self.headless = headless
         self.timeout = timeout
+        self.post_goto_seconds = post_goto_seconds
         self.rate_limiter = rate_limiter or RateLimiter()
         self.robots_checker = robots_checker or RobotsChecker()
         self.classifier = classifier or URLClassifier()
@@ -199,7 +201,7 @@ class LinkCrawlerDiscovery(DiscoveryStrategy):
                         timeout=self.timeout
                     )
                     
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(self.post_goto_seconds)
                     
                     pages_crawled += 1
                     

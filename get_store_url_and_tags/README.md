@@ -112,6 +112,8 @@ python -m get_store_url_and_tags --stores Abercrombie
 
 Alternatively, run from inside the script directory (Linux/macOS: `PYTHONPATH=. python -m get_store_url_and_tags ...`; Windows: `set PYTHONPATH=.` then `python -m get_store_url_and_tags ...`).
 
+**VS Code / Cursor:** The repo includes `.vscode/launch.json` with run configurations: default (parallel), **sequential** (`--sequential`), and single-store. Use the Run and Debug panel to start with or without the sequential flag.
+
 ---
 
 ## 1. How to Use
@@ -167,6 +169,7 @@ PYTHONPATH=scripts python -m get_store_url_and_tags --dump-item-html --max-urls-
 | `--dump-store-urls` | false | Write discovered URLs to `debug/<store>_urls_<timestamp>.json` |
 | `--headless` | `true` | Run browser headless (`true` / `false`) |
 | `--disable-fetch-clothing-items` | false | Only run discovery; do not scrape products |
+| `--sequential` | false | Run discovery and scraping one store at a time (no parallel stores) |
 | `--category` | (none) | Skip discovery; only fetch items for this category path (e.g. `Womens/Bottoms/Jeans`) |
 | `--json` | false | Emit products as JSON to stdout |
 | `--dump-item-html` | false | Save product listing page HTML to `debug/<safe_url>-dump.html` for parser development |
@@ -199,10 +202,22 @@ PYTHONPATH=scripts python -m get_store_url_and_tags --dump-item-html --max-urls-
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `rate_limit_seconds` | 2.0 | Delay between requests (link crawler) |
+| `rate_limit_seconds` | 1.2 | Per-domain delay between requests (polite crawler) |
+| `rate_limit_jitter` | 0.0 | Optional ± seconds added to rate limit (e.g. 0.2); helps avoid bot detection |
 | `max_retries` | 3 | Retries for HTTP/robots |
 | `request_timeout_seconds` | 30.0 | Timeout for HTTP and browser |
 | `max_crawl_depth` | 2 | Max depth for link crawler |
+| `scrape_page_wait_seconds` | 2.5 | Wait after product listing page load before scraping |
+| `scrape_scroll_delay_seconds` | 0.6 | Delay between scroll steps (human-like behavior) |
+| `scrape_scroll_count` | 2 | Number of scroll steps per listing page |
+| `navigation_wait_seconds` | 1.5 | Wait after goto before extracting nav links |
+| `navigation_hover_delay_seconds` | 0.2 | Delay per nav hover |
+| `navigation_post_hover_seconds` | 0.5 | Delay after hover block before extracting links |
+| `link_crawler_post_goto_seconds` | 0.5 | Wait after each page.goto in link crawler |
+
+Lower delays speed up runs but may increase bot-block risk on strict sites; all values are tunable per environment.
+
+**Concurrency:** By default, discovery runs **in parallel** across stores (each store’s link retrieval is concurrent), and scraping runs **one task per store** in parallel (each store uses one browser context and sequential requests within that store to respect per-domain politeness; up to 5 store tasks at once). Use **`--sequential`** to run discovery and scraping one store at a time instead (useful for debugging, low-memory environments, or sites that are sensitive to concurrent traffic).
 
 ---
 
@@ -277,6 +292,12 @@ Stores in config but not in `_REGISTRY` will be discovered (URLs + tags) but the
   Debug one store with detailed logs:
   ```bash
   PYTHONPATH=scripts python -m get_store_url_and_tags --stores Abercrombie -v
+  ```
+
+- **Sequential (one store at a time)**  
+  Run discovery and scraping without parallel stores (e.g. for debugging or low memory):
+  ```bash
+  PYTHONPATH=scripts python -m get_store_url_and_tags --sequential
   ```
 
 - **Dump product page HTML**  

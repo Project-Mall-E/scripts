@@ -19,7 +19,20 @@ class BaseScraper:
         self.store_name = store_name
         self.base_url = ""  # e.g. https://www.ae.com for resolving relative links
 
-    async def scrape(self, page: Page, url: str, tags: list[str], dump_html: bool = False) -> List[Product]:
+    def content_ready_selector(self) -> str | None:
+        """Optional: CSS selector to wait for before capturing HTML. Override in subclasses if content is JS-rendered."""
+        return None
+
+    async def scrape(
+        self,
+        page: Page,
+        url: str,
+        tags: list[str],
+        dump_html: bool = False,
+        page_wait_seconds: float = 2.5,
+        scroll_delay_seconds: float = 0.6,
+        scroll_count: int = 2,
+    ) -> List[Product]:
         """
         Navigate to the category URL, wait for content, then parse HTML into Product list.
         If dump_html is True, saves HTML to debug/<safe_url>-dump.html for parser development.
@@ -29,11 +42,19 @@ class BaseScraper:
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             logger.info(f"[{self.store_name}] Page loaded. Waiting for any bot checks to complete...")
-            await asyncio.sleep(5)
+            await asyncio.sleep(page_wait_seconds)
+            # Wait for product grid if scraper defines a selector (e.g. JS-rendered catalog)
+            ready_selector = self.content_ready_selector()
+            if ready_selector:
+                try:
+                    logger.info(f"[{self.store_name}] Waiting for content selector: {ready_selector!r}")
+                    await page.wait_for_selector(ready_selector, timeout=15000)
+                except Exception as e:
+                    logger.warning(f"[{self.store_name}] Timeout or error waiting for selector: {e}")
             # Add some scrolling to seem human
-            for _ in range(3):
+            for _ in range(scroll_count):
                 await page.mouse.wheel(0, 500)
-                await asyncio.sleep(1)
+                await asyncio.sleep(scroll_delay_seconds)
                 
             logger.info(f"[{self.store_name}] Fetching page content ...")
             html = await page.content()
