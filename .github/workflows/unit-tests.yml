@@ -1,0 +1,33 @@
+name: Unit tests
+
+on:
+  push:
+    branches: ["*"]
+  workflow_dispatch:  # Run manually from Actions tab
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r get_store_url_and_tags/requirements.txt
+          pip install -r get_store_url_and_tags/requirements-test.txt
+
+      - name: Run unit tests
+        run: |
+          PYTHONPATH=. python -m pytest get_store_url_and_tags/tests/ -v --tb=short \
+            --cov=get_store_url_and_tags --cov-report=term-missing --cov-fail-under=75
