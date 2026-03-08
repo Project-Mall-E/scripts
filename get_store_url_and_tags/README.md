@@ -308,3 +308,63 @@ Stores in config but not in `_REGISTRY` will be discovered (URLs + tags) but the
   Saves HTML to `debug/<safe_url>-dump.html` for inspection.
 
 Combine as needed, e.g. `--dump-store-urls --disable-fetch-clothing-items --max-urls-per-shop 1 --stores NewStore -v`.
+
+---
+
+## 6. Unit tests
+
+The project includes a full unit test suite under `tests/`, using pytest with fakes and mocks. No real browsers or external services are required.
+
+### Install test dependencies
+
+With the same virtualenv you use for the script (or a dedicated one), install the test packages:
+
+```bash
+cd /path/to/mall-e/scripts/get_store_url_and_tags
+source venv/bin/activate   # or: .\venv\Scripts\Activate.ps1 on Windows
+pip install -r requirements-test.txt
+```
+
+(`requirements-test.txt` adds `pytest`, `pytest-cov`, and `pytest-asyncio`; the main `requirements.txt` is still required for the package itself.)
+
+### Run tests
+
+From the **repo root** (so `get_store_url_and_tags` is importable via `PYTHONPATH=scripts`):
+
+**Linux / macOS**
+
+```bash
+cd /path/to/mall-e
+source scripts/get_store_url_and_tags/venv/bin/activate
+PYTHONPATH=scripts python -m pytest scripts/get_store_url_and_tags/tests/ -v
+```
+
+**With coverage** (report and enforce ≥75% on the package):
+
+```bash
+PYTHONPATH=scripts python -m pytest scripts/get_store_url_and_tags/tests/ -v \
+  --cov=get_store_url_and_tags --cov-report=term-missing --cov-fail-under=75
+```
+
+**From inside the script directory** (parent of the package must be on `PYTHONPATH`):
+
+```bash
+cd /path/to/mall-e/scripts
+source get_store_url_and_tags/venv/bin/activate
+PYTHONPATH=. python -m pytest get_store_url_and_tags/tests/ -v --cov=get_store_url_and_tags --cov-report=term-missing
+```
+
+**Windows (PowerShell)**
+
+```powershell
+cd C:\path\to\mall-e
+.\scripts\get_store_url_and_tags\venv\Scripts\Activate.ps1
+$env:PYTHONPATH = "scripts"; python -m pytest scripts/get_store_url_and_tags/tests/ -v --cov=get_store_url_and_tags --cov-report=term-missing
+```
+
+Tests are configured in `pytest.ini` (e.g. `asyncio_mode = auto`, `testpaths = tests`). Run a single file or test with:
+
+```bash
+PYTHONPATH=scripts python -m pytest scripts/get_store_url_and_tags/tests/test_config.py -v
+PYTHONPATH=scripts python -m pytest scripts/get_store_url_and_tags/tests/test_config.py::test_load_config_explicit_path -v
+```

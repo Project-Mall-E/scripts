@@ -1,0 +1,173 @@
+"""Tests for app."""
+
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from get_store_url_and_tags.app import (
+    PipelineOptions,
+    PipelineResult,
+    _get_storage_provider,
+    run_pipeline,
+)
+from get_store_url_and_tags.config import Config
+from get_store_url_and_tags.models import Product, StoreLink
+from get_store_url_and_tags.models.store import StoreDefinition
+from get_store_url_and_tags.config import Settings
+
+
+def _make_config() -> Config:
+    store = StoreDefinition(
+        name="TestStore",
+        homepage="https://www.teststore.com",
+        domain="teststore.com",
+    )
+    return Config(stores=[store], settings=Settings())
+
+
+def test_pipeline_options_defaults() -> None:
+    opts = PipelineOptions()
+    assert opts.stores_filter is None
+    assert opts.headless is True
+    assert opts.dump_urls is False
+    assert opts.disable_fetch_clothing_items is False
+    assert opts.category is None
+    assert opts.store_in_database is False
+
+
+def test_pipeline_result_success() -> None:
+    r = PipelineResult(entries=[], products=None)
+    assert r.success is True
+
+
+def test_get_storage_provider_returns_firestore() -> None:
+    provider = _get_storage_provider()
+    from get_store_url_and_tags.storage import FirestoreStorageProvider
+    assert isinstance(provider, FirestoreStorageProvider)
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_returns_entries_and_products() -> None:
+    config = _make_config()
+    options = PipelineOptions(
+        stores_filter=["TestStore"],
+        disable_fetch_clothing_items=False,
+        debug_dir=Path("/tmp/test_debug"),
+    )
+    link = StoreLink(name="TestStore", url="https://test.com/cat", tags=["Womens"])
+    product = Product(
+        store="TestStore",
+        item_name="P",
+        item_image_link="",
+        item_link="https://test.com/p/1",
+        price="$10",
+        tags=[],
+    )
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[link])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        with patch("get_store_url_and_tags.scraping.orchestrator.ScrapingOrchestrator") as mock_scrape_class:
+            mock_scrape = MagicMock()
+            mock_scrape.run = AsyncMock(return_value=[product])
+            mock_scrape_class.return_value = mock_scrape
+            result = await run_pipeline(config, options)
+    assert len(result.entries) == 1
+    assert result.entries[0].url == link.url
+    assert result.products is not None
+    assert len(result.products) == 1
+    assert result.products[0].item_name == "P"
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_category_filter() -> None:
+    config = _make_config()
+    options = PipelineOptions(
+        stores_filter=["TestStore"],
+        category="Womens/Tops",
+        disable_fetch_clothing_items=True,
+        debug_dir=Path("/tmp/test_debug"),
+    )
+    matching = StoreLink(name="TestStore", url="https://test.com/w/tops", tags=["Womens", "Tops"])
+    non_matching = StoreLink(name="TestStore", url="https://test.com/m/jeans", tags=["Mens", "Jeans"])
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[matching, non_matching])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        result = await run_pipeline(config, options)
+    assert len(result.entries) == 1
+    assert result.entries[0].tags == ["Womens", "Tops"]
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_category_no_match_raises() -> None:
+    config = _make_config()
+    options = PipelineOptions(
+        stores_filter=["TestStore"],
+        category="Womens/Nonexistent",
+        disable_fetch_clothing_items=True,
+        debug_dir=Path("/tmp/test_debug"),
+    )
+    link = StoreLink(name="TestStore", url="https://test.com/cat", tags=["Womens", "Tops"])
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[link])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        with pytest.raises(ValueError, match="Category .* not found"):
+            await run_pipeline(config, options)
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_disable_fetch_no_scraping() -> None:
+    config = _make_config()
+    options = PipelineOptions(
+        stores_filter=["TestStore"],
+        disable_fetch_clothing_items=True,
+        debug_dir=Path("/tmp/test_debug"),
+    )
+    link = StoreLink(name="TestStore", url="https://test.com/cat", tags=["Womens"])
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[link])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        result = await run_pipeline(config, options)
+    assert result.products is None
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_store_in_database_calls_upsert(tmp_path: Path) -> None:
+    config = _make_config()
+    product = Product(
+        store="TestStore",
+        item_name="P",
+        item_image_link="",
+        item_link="https://test.com/p/1",
+        price="$10",
+        tags=[],
+    )
+    options = PipelineOptions(
+        stores_filter=["TestStore"],
+        disable_fetch_clothing_items=False,
+        store_in_database=True,
+        debug_dir=tmp_path,
+    )
+    link = StoreLink(name="TestStore", url="https://test.com/cat", tags=["Womens"])
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[link])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        with patch("get_store_url_and_tags.scraping.orchestrator.ScrapingOrchestrator") as mock_scrape_class:
+            mock_scrape = MagicMock()
+            mock_scrape.run = AsyncMock(return_value=[product])
+            mock_scrape_class.return_value = mock_scrape
+            with patch("get_store_url_and_tags.app._get_storage_provider") as mock_get_storage:
+                mock_provider = MagicMock()
+                mock_get_storage.return_value = mock_provider
+                await run_pipeline(config, options)
+    mock_provider.upsert.assert_called_once_with(product)
