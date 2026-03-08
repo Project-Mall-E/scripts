@@ -3,6 +3,7 @@ name: Unit tests
 on:
   push:
     branches: ["*"]
+  workflow_dispatch:  # Run manually from Actions tab
 
 jobs:
   test:
