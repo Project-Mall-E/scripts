@@ -8,16 +8,7 @@ You need **Python 3.8+**, a **virtualenv**, the packages in `requirements.txt`, 
 
 ### 1. Create a virtualenv and install Python dependencies
 
-**Linux (Ubuntu / Debian)**
-
-```bash
-cd /path/to/mall-e/scripts/get_store_url_and_tags
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-**macOS**
+**macOS Linux (Ubuntu / Debian)**
 
 ```bash
 cd /path/to/mall-e/scripts/get_store_url_and_tags
@@ -27,26 +18,6 @@ pip install -r requirements.txt
 ```
 
 (If your Mac only has `python`, use `python` instead of `python3`; ensure it’s 3.8+ with `python3 --version` or `python --version`.)
-
-**Windows (PowerShell)**
-
-```powershell
-cd C:\path\to\mall-e\scripts\get_store_url_and_tags
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-**Windows (Command Prompt)**
-
-```cmd
-cd C:\path\to\mall-e\scripts\get_store_url_and_tags
-python -m venv venv
-venv\Scripts\activate.bat
-pip install -r requirements.txt
-```
-
-On Windows, if `python` is not in PATH, try `py -3 -m venv venv` and then `py -3 -m pip install -r requirements.txt`.
 
 ### 2. Install Chromium for Playwright
 
@@ -72,15 +43,6 @@ No system deps needed. Just:
 playwright install chromium
 ```
 
-**Windows**  
-No system deps needed. Just:
-
-```bash
-playwright install chromium
-```
-
-(In PowerShell or Command Prompt, same command.)
-
 ### 3. Run the script
 
 Use the **repo root** so `scripts` is on `PYTHONPATH`:
@@ -93,24 +55,7 @@ source scripts/get_store_url_and_tags/venv/bin/activate
 PYTHONPATH=scripts python -m get_store_url_and_tags --stores Abercrombie
 ```
 
-**Windows (PowerShell)**
-
-```powershell
-cd C:\path\to\mall-e
-.\scripts\get_store_url_and_tags\venv\Scripts\Activate.ps1
-$env:PYTHONPATH = "scripts"; python -m get_store_url_and_tags --stores Abercrombie
-```
-
-**Windows (Command Prompt)**
-
-```cmd
-cd C:\path\to\mall-e
-scripts\get_store_url_and_tags\venv\Scripts\activate.bat
-set PYTHONPATH=scripts
-python -m get_store_url_and_tags --stores Abercrombie
-```
-
-Alternatively, run from inside the script directory (Linux/macOS: `PYTHONPATH=. python -m get_store_url_and_tags ...`; Windows: `set PYTHONPATH=.` then `python -m get_store_url_and_tags ...`).
+Alternatively, run from inside the script directory (Linux/macOS: `PYTHONPATH=. python -m get_store_url_and_tags ...`; 
 
 **VS Code / Cursor:** The repo includes `.vscode/launch.json` with run configurations: default (parallel), **sequential** (`--sequential`), and single-store. Use the Run and Debug panel to start with or without the sequential flag.
 
@@ -120,7 +65,7 @@ Alternatively, run from inside the script directory (Linux/macOS: `PYTHONPATH=. 
 
 ### Run from repo root (recommended)
 
-From the repo root with virtualenv activated. **Linux/macOS:** set `PYTHONPATH=scripts` in the same line as the command. **Windows (PowerShell):** `$env:PYTHONPATH="scripts"`; **Windows (CMD):** `set PYTHONPATH=scripts` (then run the `python -m ...` command).
+From the repo root with virtualenv activated. **Linux/macOS:** set `PYTHONPATH=scripts` in the same line as the command. 
 
 ```bash
 # Process all stores in config (discovery + scraping)
@@ -175,7 +120,17 @@ PYTHONPATH=scripts python -m get_store_url_and_tags --dump-item-html --max-urls-
 | `--dump-item-html` | false | Save product listing page HTML to `debug/<safe_url>-dump.html` for parser development |
 | `--max-urls-per-shop` | (none) | Cap number of category URLs scraped per store (for debugging) |
 | `--verbose` / `-v` | false | DEBUG logging |
-| `--store-in-database` | false | Persist scraped products to Firestore (or configured backend) |
+| `--store-in-database` | false | Persist scraped products to the configured storage backend (see below) |
+
+**Storage backends (when using `--store-in-database`):** The backend is chosen by the `STORAGE_BACKEND` environment variable. If unset or not `supabase`, products are written to **Firestore** (requires `secrets/firebase-serviceaccount.json`). For **Supabase**, set:
+
+- `STORAGE_BACKEND=supabase`
+- `SUPABASE_URL` — e.g. `https://<project>.supabase.co`
+- `SUPABASE_SERVICE_ROLE_KEY` — your project’s service role key
+
+You can put these in a **`.env` file** in the current working directory (or package root); the app loads `.env` automatically via `python-dotenv` when you run `python -m get_store_url_and_tags`.
+
+The Supabase backend expects the database to have the `upsert_product_from_json(p jsonb)` RPC and the `products_with_tags` view (normalized products + tags schema). Add a unique constraint on `products.item_link` and implement the upsert RPC as described in the project plan.
 
 ### Config file: `config/stores.json`
 
@@ -321,11 +276,9 @@ With the same virtualenv you use for the script (or a dedicated one), install th
 
 ```bash
 cd /path/to/mall-e/scripts/get_store_url_and_tags
-source venv/bin/activate   # or: .\venv\Scripts\Activate.ps1 on Windows
+source venv/bin/activate   #
 pip install -r requirements-test.txt
 ```
-
-(`requirements-test.txt` adds `pytest`, `pytest-cov`, and `pytest-asyncio`; the main `requirements.txt` is still required for the package itself.)
 
 ### Run tests
 
@@ -354,13 +307,6 @@ source get_store_url_and_tags/venv/bin/activate
 PYTHONPATH=. python -m pytest get_store_url_and_tags/tests/ -v --cov=get_store_url_and_tags --cov-report=term-missing
 ```
 
-**Windows (PowerShell)**
-
-```powershell
-cd C:\path\to\mall-e
-.\scripts\get_store_url_and_tags\venv\Scripts\Activate.ps1
-$env:PYTHONPATH = "scripts"; python -m pytest scripts/get_store_url_and_tags/tests/ -v --cov=get_store_url_and_tags --cov-report=term-missing
-```
 
 Tests are configured in `pytest.ini` (e.g. `asyncio_mode = auto`, `testpaths = tests`). Run a single file or test with:
 

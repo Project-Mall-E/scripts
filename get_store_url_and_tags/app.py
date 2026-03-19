@@ -1,5 +1,6 @@
 """High-level pipeline: discovery -> optional scraping -> optional storage. Used by main."""
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -111,6 +112,12 @@ async def run_pipeline(
 
 
 def _get_storage_provider():
-    """Return the configured storage provider (e.g. Firestore). Used when store_in_database is True."""
-    from .storage import FirestoreStorageProvider
+    """Return the configured storage provider (Firestore or Supabase). Used when store_in_database is True."""
+    from .storage import FirestoreStorageProvider, SupabaseStorageProvider
+    backend = os.environ.get("STORAGE_BACKEND", "").strip().lower()
+    if backend == "supabase":
+        return SupabaseStorageProvider(
+            url=os.environ.get("SUPABASE_URL"),
+            key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+        )
     return FirestoreStorageProvider()

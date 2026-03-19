@@ -29,6 +29,13 @@ if __name__ == "__main__":
     if _parent not in [Path(p).resolve() for p in sys.path]:
         sys.path.insert(0, str(_parent))
 
+# Load .env into os.environ so STORAGE_BACKEND, SUPABASE_*, etc. work from a .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from get_store_url_and_tags.app import PipelineOptions, run_pipeline
 from get_store_url_and_tags.config import load_config
 from get_store_url_and_tags.output import emit_products

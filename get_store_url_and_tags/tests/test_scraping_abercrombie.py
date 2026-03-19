@@ -115,3 +115,79 @@ def test_abercrombie_parse_html_duplicate_dollar_cleanup() -> None:
     scraper = AbercrombieScraper()
     products = scraper.parse_html(soup, [])
     assert products[0].price == "$25"
+
+
+def test_abercrombie_parse_html_rejects_1x1_gif_data_uri_image() -> None:
+    html = """
+    <div>
+      <li data-testid="catalog-product-card">
+        <span data-testid="catalog-product-card-name">Shirt Name</span>
+        <span data-testid="product-price">$29.00</span>
+        <a href="/p/shirt-1">Link</a>
+        <img src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw" />
+      </li>
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    scraper = AbercrombieScraper()
+    products = scraper.parse_html(soup, ["Womens", "Tops"])
+    assert len(products) == 1
+    assert products[0].item_image_link == "None"
+
+
+def test_abercrombie_parse_html_resolves_relative_image() -> None:
+    html = """
+    <div>
+      <li data-testid="catalog-product-card">
+        <span data-testid="catalog-product-card-name">Shirt Name</span>
+        <span data-testid="product-price">$29.00</span>
+        <a href="/p/shirt-1">Link</a>
+        <img src="/img/shirt.jpg" />
+      </li>
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    scraper = AbercrombieScraper()
+    products = scraper.parse_html(soup, [])
+    assert len(products) == 1
+    assert products[0].item_image_link == "https://www.abercrombie.com/img/shirt.jpg"
+
+
+def test_abercrombie_parse_html_drills_down_to_valid_image_when_first_is_placeholder() -> None:
+    html = """
+    <div>
+      <li data-testid="catalog-product-card">
+        <span data-testid="catalog-product-card-name">Shirt Name</span>
+        <span data-testid="product-price">$29.00</span>
+        <a href="/p/shirt-1">Link</a>
+        <img src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw" />
+        <img src="/img/shirt-real.jpg" />
+      </li>
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    scraper = AbercrombieScraper()
+    products = scraper.parse_html(soup, ["Womens", "Tops"])
+    assert len(products) == 1
+    assert products[0].item_image_link == "https://www.abercrombie.com/img/shirt-real.jpg"
+
+
+def test_abercrombie_parse_html_uses_intlkic_when_only_placeholder_src() -> None:
+    html = """
+    <div>
+      <li data-testid="catalog-product-card" data-intlkic="KIC_116-6033-00102-900">
+        <span data-testid="catalog-product-card-name">Shirt Name</span>
+        <span data-testid="product-price">$29.00</span>
+        <a href="/p/shirt-1">Link</a>
+        <img src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw" />
+      </li>
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    scraper = AbercrombieScraper()
+    products = scraper.parse_html(soup, ["Womens", "Tops"])
+    assert len(products) == 1
+    assert (
+        products[0].item_image_link
+        == "https://img.abercrombie.com/is/image/anf/KIC_116-6033-00102-900_prod1?policy=product-medium"
+    )

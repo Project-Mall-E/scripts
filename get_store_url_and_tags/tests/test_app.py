@@ -42,9 +42,25 @@ def test_pipeline_result_success() -> None:
 
 
 def test_get_storage_provider_returns_firestore() -> None:
-    provider = _get_storage_provider()
+    with patch.dict("os.environ", {"STORAGE_BACKEND": ""}, clear=False):
+        provider = _get_storage_provider()
     from get_store_url_and_tags.storage import FirestoreStorageProvider
     assert isinstance(provider, FirestoreStorageProvider)
+
+
+def test_get_storage_provider_returns_supabase_when_configured() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "STORAGE_BACKEND": "supabase",
+            "SUPABASE_URL": "https://x.supabase.co",
+            "SUPABASE_SERVICE_ROLE_KEY": "secret",
+        },
+        clear=False,
+    ):
+        provider = _get_storage_provider()
+    from get_store_url_and_tags.storage import SupabaseStorageProvider
+    assert isinstance(provider, SupabaseStorageProvider)
 
 
 @pytest.mark.asyncio

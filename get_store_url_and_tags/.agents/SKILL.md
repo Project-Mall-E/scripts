@@ -1,5 +1,5 @@
 ---
-name: Creating New Scraper Parsers
+name: run-creating_new_scraper_parsers 
 description: Instructions for using the HTML dump feature to create new content parsers in the scrapers/ per-store structure. Includes virtualenv setup.
 ---
 
@@ -14,16 +14,12 @@ Commands below assume the project virtualenv is activated. From the package root
 
 ```bash
 cd scripts/get_store_url_and_tags
-source venv/bin/activate   # or: . venv/bin/activate
+source .venv/bin/activate   # or: . venv/bin/activate
 ```
 
 After activation, use `python main.py` (or `python -m get_store_url_and_tags` when run with `PYTHONPATH` set from repo root).
 
-### Scraper layout
-Scrapers live in **one file per store** under `scraping/scrapers/`:
-
-- `scraping/scrapers/abercrombie.py` → Abercrombie
-- `scraping/scrapers/american_eagle.py` → AmericanEagle
+### ScraperProductng/scrapers/american_eagle.py` → AmericanEagle
 - New store → add `scraping/scrapers/<store_slug>.py` and register it in `scraping/scrapers/__init__.py`
 
 The main entry point supports dumping raw HTML with `--dump-item-html` so you can inspect the DOM offline while building a parser.
@@ -52,15 +48,7 @@ Note the selectors for:
 - Product name  
 - Price (sale vs list)  
 - Product URL  
-- Image URL  
-
----
-
-## Step 3: Add a new scraper file
-
-Create a **new module** under `scraping/scrapers/` using a short, snake_case filename (e.g. `loft.py` for Loft).
-
-1. Define `STORE_NAME` (must match the store name in config, e.g. `"Loft"`).
+- ImageProductne `STORE_NAME` (must match the store name in config, e.g. `"Loft"`).
 2. Subclass `BaseScraper`, set `store_name` and `base_url` in `__init__`.
 3. Implement `parse_html(self, soup, tags)` to find product cards and return a list of `Product` instances.
 
@@ -81,7 +69,7 @@ STORE_NAME = "Loft"
 class LoftScraper(BaseScraper):
     def __init__(self):
         super().__init__(STORE_NAME)
-        self.base_url = "https://www.loft.com"
+        Productelf.base_url = "https://www.loft.com"
 
     def parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]:
         products = []
