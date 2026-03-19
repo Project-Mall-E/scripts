@@ -41,8 +41,15 @@ def test_pipeline_result_success() -> None:
     assert r.success is True
 
 
-def test_get_storage_provider_returns_firestore() -> None:
+def test_get_storage_provider_returns_supabase_by_default() -> None:
     with patch.dict("os.environ", {"STORAGE_BACKEND": ""}, clear=False):
+        provider = _get_storage_provider()
+    from get_store_url_and_tags.storage import SupabaseStorageProvider
+    assert isinstance(provider, SupabaseStorageProvider)
+
+
+def test_get_storage_provider_returns_firestore_when_explicit() -> None:
+    with patch.dict("os.environ", {"STORAGE_BACKEND": "firestore"}, clear=False):
         provider = _get_storage_provider()
     from get_store_url_and_tags.storage import FirestoreStorageProvider
     assert isinstance(provider, FirestoreStorageProvider)

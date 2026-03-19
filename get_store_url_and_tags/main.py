@@ -130,7 +130,7 @@ Examples:
     parser.add_argument(
         "--store-in-database",
         action="store_true",
-        help="Persist scraped products to storage backend (e.g. Firestore)"
+        help="Persist scraped products to storage backend (default: Supabase)"
     )
 
     return parser.parse_args()

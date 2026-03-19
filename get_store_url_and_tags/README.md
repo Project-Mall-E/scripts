@@ -122,10 +122,14 @@ PYTHONPATH=scripts python -m get_store_url_and_tags --dump-item-html --max-urls-
 | `--verbose` / `-v` | false | DEBUG logging |
 | `--store-in-database` | false | Persist scraped products to the configured storage backend (see below) |
 
-**Storage backends (when using `--store-in-database`):** The backend is chosen by the `STORAGE_BACKEND` environment variable. If unset or not `supabase`, products are written to **Firestore** (requires `secrets/firebase-serviceaccount.json`). For **Supabase**, set:
+**Storage backends (when using `--store-in-database`):** The backend is chosen by the `STORAGE_BACKEND` environment variable. Default is **Supabase**.
 
-- `STORAGE_BACKEND=supabase`
+To use **Firestore** instead, set:
+- `STORAGE_BACKEND=firestore` (requires `secrets/firebase-serviceaccount.json`)
+
+For **Supabase** (default), set:
 - `SUPABASE_URL` — e.g. `https://<project>.supabase.co`
+- `SUPABASE_SERVICE_ROLE_KEY` — your project’s service role key
 - `SUPABASE_SERVICE_ROLE_KEY` — your project’s service role key
 
 You can put these in a **`.env` file** in the current working directory (or package root); the app loads `.env` automatically via `python-dotenv` when you run `python -m get_store_url_and_tags`.

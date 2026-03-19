@@ -1,101 +1,138 @@
 ---
-name: run-get_store_url_and_tags-with-venv
-description: Run the `get_store_url_and_tags` program and create or reuse the project `.venv` virtual environment. Use when the user asks how to execute the pipeline or how to set up dependencies in this repository.
+name: run-creating_new_scraper_parsers 
+description: Instructions for using the HTML dump feature to create new content parsers in the scrapers/ per-store structure. Includes virtualenv setup.
 ---
 
-# Run `get_store_url_and_tags` with `.venv`
+# Creating New Scraper Parsers
 
-## When to use this skill
+This skill helps you create new website product parsers using the HTML dump feature. The system navigates to a clothing category URL, captures the raw HTML, and parses items into `Product` objects.
 
-Use this skill when the user asks how to run the program in this repo, how to set up dependencies, or how to create/reuse the project virtual environment named `.venv`.
+## Prerequisites
 
-## Quick start (one-time setup)
-
-From the repository root (this directory):
-
-1. Create a virtualenv (reuses `.venv` if it already exists):
+### Virtualenv
+Commands below assume the project virtualenv is activated. From the package root (`scripts/get_store_url_and_tags`):
 
 ```bash
-cd /home/rob/Development/mall-e/scripts
-
-# Create .venv if missing
-python3 -m venv .venv
-
-# Activate it
-source .venv/bin/activate
-```
-Product
-```bash
-pip install -U pip
-pip install -r get_store_url_and_tags/requirements.txt
-pip install -r get_store_url_and_tags/requirements-test.txt
+cd scripts/get_store_url_and_tags
+source .venv/bin/activate   # or: . venv/bin/activate
 ```
 
-## Reuse `.venv` (typical workflow)
+After activation, use `python main.py` (or `python -m get_store_url_and_tags` when run with `PYTHONPATH` set from repo root).
 
-When `.venv` already exists, just activate it and reinstall deps only if requirements changed:
+### ScraperProductng/scrapers/american_eagle.py` → AmericanEagle
+- New store → add `scraping/scrapers/<store_slug>.py` and register it in `scraping/scrapers/__init__.py`
+
+The main entry point supports dumping raw HTML with `--dump-item-html` so you can inspect the DOM offline while building a parser.
+
+---
+
+## Step 1: Dump the target HTML
+
+Run the pipeline for the target store with HTML dump and a single URL per shop to speed things up:
 
 ```bash
-cd /home/rob/Development/mall-e/scripts
-source .venv/bin/activate
-
-# Optional, when requirements.txt changed
-pip install -r get_store_url_and_tags/requirements.txt
+# from scripts/get_store_url_and_tags with venv activated
+python main.py --stores <StoreName> --max-urls-per-shop 1 --dump-item-html
 ```
 
-## Run the pipeline
+This creates a `debug/` directory with files named `<url>-dump.html`.
 
-The program entrypoint is a module:
+---
+
+## Step 2: Analyze the HTML
+
+Inspect the dumped HTML (e.g. with your editor or grep). Find the container that wraps each product (often a `div` or `li` with a class like `product-card`, `product-tile`, etc.).
+
+Note the selectors for:
+
+- Product name  
+- Price (sale vs list)  
+- Product URL  
+- ImageProductne `STORE_NAME` (must match the store name in config, e.g. `"Loft"`).
+2. Subclass `BaseScraper`, set `store_name` and `base_url` in `__init__`.
+3. Implement `parse_html(self, soup, tags)` to find product cards and return a list of `Product` instances.
+
+Example `scraping/scrapers/loft.py`:
+
+```python
+"""Loft product listing scraper."""
+
+from typing import List
+from bs4 import BeautifulSoup
+
+from ..base import BaseScraper
+from ..product import Product
+
+STORE_NAME = "Loft"
+
+
+class LoftScraper(BaseScraper):
+    def __init__(self):
+        super().__init__(STORE_NAME)
+        Productelf.base_url = "https://www.loft.com"
+
+    def parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]:
+        products = []
+        cards = soup.find_all("div", class_="product-card-class")  # use real selectors
+
+        for card in cards:
+            name = ...   # extract from card
+            price = ...
+            link = ...
+            img = ...
+            if link and link.startswith("/"):
+                link = self.base_url + link
+            products.append(Product(
+                store=self.store_name,
+                item_name=name,
+                item_image_link=img,
+                item_link=link,
+                price=price,
+                tags=tags,
+            ))
+        return products
+```
+
+---
+
+## Step 4: Register the scraper
+
+In `scraping/scrapers/__init__.py`:
+
+1. Import the new module.
+2. Add an entry to `_REGISTRY` mapping `STORE_NAME` to the scraper class.
+
+Example:
+
+```python
+from . import abercrombie
+from . import american_eagle
+from . import loft   # add this
+
+_REGISTRY: dict[str, type[BaseScraper]] = {
+    abercrombie.STORE_NAME: abercrombie.AbercrombieScraper,
+    american_eagle.STORE_NAME: american_eagle.AmericanEagleScraper,
+    loft.STORE_NAME: loft.LoftScraper,   # add this
+}
+```
+
+`get_scraper_for_store(store_name)` will then return an instance for that store; no change needed elsewhere.
+
+---
+
+## Step 5: Verify
+
+With venv activated, run the pipeline for the new store and check that parsed fields look correct:
 
 ```bash
-PYTHONPATH=scripts python -m get_store_url_and_tags
+python main.py --stores <StoreName> --max-urls-per-shop 1
 ```
 
-Common examples:
+Confirm in the output that item name, price, link, and image are filled and not `None`.
 
-1. Run discovery + scraping for a single store:
+To see which stores have scrapers registered:
 
-```bash
-PYTHONPATH=scripts python -m get_store_url_and_tags --stores Abercrombie
+```python
+from get_store_url_and_tags.scraping.scrapers import get_registered_store_names
+print(get_registered_store_names())
 ```
-
-2. Discovery-only:
-
-```bash
-PYTHONPATH=scripts python -m get_store_url_and_tags --disable-fetch-clothing-items
-```
-
-3. Scrape a specific category path:
-
-```bash
-PYTHONPATH=scripts python -m get_store_url_and_tags --category "Womens/Bottoms"
-```
-
-4. Dump discovered URLs to `get_store_url_and_tags/debug/`:
-
-```bash
-PYTHONPATH=scripts python -m get_store_url_and_tags --dump-store-urls --disable-fetch-clothing-items
-```
-
-## Optional: install Playwright browser dependencies
-
-If you run the scraper and Playwright fails due to missing Chromium/system dependencies, run:
-
-```bash
-playwright install --with-deps chromium
-```
-
-## Run unit tests
-
-```bash
-cd /home/rob/Development/mall-e/scripts
-source .venv/bin/activate
-PYTHONPATH=scripts pytest get_store_url_and_tags/tests/ -q
-```
-
-## Troubleshooting notes
-
-1. If `python -m pytest` says `pytest` is missing, run `pip install -r get_store_url_and_tags/requirements-test.txt`.
-2. If the module can’t be imported, ensure you are running from the repo root and set `PYTHONPATH=scripts`.
-3. Keep the `.venv` directory checked into `.gitignore` (it should already be ignored in this repo).
-
