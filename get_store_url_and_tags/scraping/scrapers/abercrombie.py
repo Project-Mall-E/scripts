@@ -4,6 +4,7 @@ from typing import List
 from bs4 import BeautifulSoup
 
 from ..base import BaseScraper
+from ..card_descriptions import collect_item_descriptions_from_card
 from ..product import Product
 
 STORE_NAME = "Abercrombie"
@@ -197,12 +198,14 @@ class AbercrombieScraper(BaseScraper):
                 link = self.base_url + link
 
             if name != 'None' and price != "None":
+                item_descriptions = collect_item_descriptions_from_card(card, name)
                 products.append(Product(
                     store=self.store_name,
                     item_name=name,
                     item_image_links=item_image_links,
                     item_link=link,
                     price=price,
-                    tags=tags
+                    tags=tags,
+                    item_descriptions=item_descriptions,
                 ))
         return products

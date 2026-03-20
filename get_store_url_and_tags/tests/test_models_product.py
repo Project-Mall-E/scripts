@@ -30,3 +30,17 @@ def test_product_empty_image_links() -> None:
         tags=[],
     )
     assert p.item_image_links == []
+    assert p.item_descriptions == []
+
+
+def test_product_item_descriptions_explicit() -> None:
+    p = Product(
+        store="S",
+        item_name="Pants",
+        item_image_links=[],
+        item_link="https://x",
+        price="$1",
+        tags=["Womens", "Pants"],
+        item_descriptions=["white", "wide", "leg"],
+    )
+    assert p.item_descriptions == ["white", "wide", "leg"]

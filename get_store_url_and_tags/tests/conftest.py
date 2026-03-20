@@ -60,6 +60,7 @@ def sample_product(sample_store_definition: StoreDefinition) -> Product:
         item_link="https://www.teststore.com/p/shirt-1",
         price="$29.99",
         tags=["Womens", "Tops"],
+        item_descriptions=["cotton", "crew", "neck"],
     )
 
 

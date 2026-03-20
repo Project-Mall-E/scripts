@@ -51,6 +51,7 @@ Note the selectors for:
 - Price (sale vs list)  
 - Product URL  
 - Image URL(s)—listing cards may expose **multiple** `<img>` tags per product. Collect all usable absolute (or normalizable) URLs in **DOM order**, **dedupe** while preserving order, and pass them as `item_image_links: list[str]` (use `[]` when none).
+- **Facet words** (color, fit, fabric, style hints on the card)—collect text from the card, then `collect_item_descriptions_from_card` yields **unique lowercase words** (first-seen order; use `[]` when none). Prefer stable `data-qa` / `data-testid` / `data-cmp` hooks; extend `scraping/card_descriptions.py` if the store needs new attribute patterns.
 
 ---
 
@@ -88,6 +89,7 @@ class LoftScraper(BaseScraper):
             price = ...
             link = ...
             image_urls = [...]  # collect from card.find_all("img"), normalize, dedupe
+            item_descriptions = [...]  # unique words: collect_item_descriptions_from_card(card, name)
             if link and link.startswith("/"):
                 link = self.base_url + link
             products.append(Product(
@@ -97,6 +99,7 @@ class LoftScraper(BaseScraper):
                 item_link=link,
                 price=price,
                 tags=tags,
+                item_descriptions=item_descriptions,
             ))
         return products
 ```

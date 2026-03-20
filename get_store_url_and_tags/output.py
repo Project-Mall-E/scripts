@@ -61,6 +61,8 @@ def emit_products(
                     print(f"  {u}")
             else:
                 print("Images: (none)")
+            if p.item_descriptions:
+                print(f"Desc : {p.item_descriptions}")
             print(f"Tags : {p.tags}")
             print("-" * 80)
 

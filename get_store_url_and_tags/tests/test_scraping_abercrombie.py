@@ -97,6 +97,7 @@ def test_abercrombie_parse_html_data_testid() -> None:
     <div>
       <li data-testid="catalog-product-card">
         <span data-testid="catalog-product-card-name">Shirt Name</span>
+        <span data-testid="catalog-product-card-color">Heather Gray</span>
         <span data-testid="product-price">$29.00</span>
         <a href="/p/shirt-1">Link</a>
         <img src="/img/shirt.jpg" />
@@ -108,6 +109,7 @@ def test_abercrombie_parse_html_data_testid() -> None:
     products = scraper.parse_html(soup, ["Womens", "Tops"])
     assert len(products) == 1
     assert products[0].item_name == "Shirt Name"
+    assert products[0].item_descriptions == ["heather", "gray"]
     assert products[0].price == "$29.00"
     assert products[0].item_link == "https://www.abercrombie.com/p/shirt-1"
     assert products[0].tags == ["Womens", "Tops"]

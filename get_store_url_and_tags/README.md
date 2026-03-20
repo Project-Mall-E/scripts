@@ -196,8 +196,8 @@ Product listing pages are parsed by **per-store scrapers** in `scraping/scrapers
    - Subclass `BaseScraper`, call `super().__init__(STORE_NAME)` and set `self.base_url`.
    - Implement `parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]`:
      - Find product cards (e.g. by class or `data-*`).
-     - For each card, extract name, price, link, image URL.
-     - Return `List[Product]` with `store`, `item_name`, `item_image_links` (`list[str]`, possibly empty), `item_link`, `price`, `tags`.
+     - For each card, extract name, price, link, image URLs, and optional facet text; tokenize into **unique lowercase words** in `item_descriptions` (`list[str]`, possibly empty).
+     - Return `List[Product]` with `store`, `item_name`, `item_image_links` (`list[str]`, possibly empty), `item_link`, `price`, `tags`, `item_descriptions` (`list[str]` of unique words, possibly empty; defaults to `[]`).
 
 3. **Register** the scraper in `scraping/scrapers/__init__.py`:
    - `from . import <store_slug>`

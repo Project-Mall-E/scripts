@@ -4,9 +4,29 @@ from typing import List
 from bs4 import BeautifulSoup
 
 from ..base import BaseScraper
+from ..card_descriptions import (
+    collect_item_descriptions_from_card,
+    merge_unique_word_lists,
+    unique_words_from_texts,
+)
 from ..product import Product
 
 STORE_NAME = "AmericanEagle"
+
+# Strip from title tokenization only; listing tiles often have no color/fit nodes.
+_AE_TITLE_NOISE_WORDS: frozenset[str] = frozenset({"ae", "aerie"})
+
+
+def _american_eagle_item_descriptions(card, name: str) -> list[str]:
+    """
+    UGP listing tiles use data-testid (not data-qa) and often omit swatches; merge
+    global card hints with tokenized product title + merchant badges.
+    """
+    dom_words = collect_item_descriptions_from_card(card, name)
+    name_words = [
+        w for w in unique_words_from_texts([name]) if w not in _AE_TITLE_NOISE_WORDS
+    ]
+    return merge_unique_word_lists(dom_words, name_words)
 
 
 def _collect_image_links(card) -> list[str]:
@@ -60,12 +80,14 @@ class AmericanEagleScraper(BaseScraper):
                 link = self.base_url + link
 
             if name != "None":
+                item_descriptions = _american_eagle_item_descriptions(card, name)
                 products.append(Product(
                     store=self.store_name,
                     item_name=name,
                     item_image_links=item_image_links,
                     item_link=link,
                     price=price,
-                    tags=tags
+                    tags=tags,
+                    item_descriptions=item_descriptions,
                 ))
         return products
