@@ -82,7 +82,7 @@ async def test_run_pipeline_returns_entries_and_products() -> None:
     product = Product(
         store="TestStore",
         item_name="P",
-        item_image_link="",
+        item_image_links=[],
         item_link="https://test.com/p/1",
         price="$10",
         tags=[],
@@ -168,7 +168,7 @@ async def test_run_pipeline_store_in_database_calls_upsert(tmp_path: Path) -> No
     product = Product(
         store="TestStore",
         item_name="P",
-        item_image_link="",
+        item_image_links=[],
         item_link="https://test.com/p/1",
         price="$10",
         tags=[],

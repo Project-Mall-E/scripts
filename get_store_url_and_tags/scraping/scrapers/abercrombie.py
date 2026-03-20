@@ -23,6 +23,22 @@ def _is_placeholder_1x1_gif_data_uri(src: str) -> bool:
     )
 
 
+def _is_usable_abercrombie_cdn_image(url: str) -> bool:
+    """
+    Omit Scene7 URLs that are not meaningful product photography on a listing card:
+    policy=product-xsmall thumbnails and *_sw swatch variants.
+    """
+    if "img.abercrombie.com/is/image/anf/" not in url:
+        return True
+    if "policy=product-xsmall" in url.lower():
+        return False
+    path = url.split("?", 1)[0]
+    asset = path.rsplit("/", 1)[-1]
+    if asset.endswith("_sw"):
+        return False
+    return True
+
+
 def _normalize_image_src(src: str, *, base_url: str) -> str:
     """
     Normalize image URL.
@@ -40,13 +56,13 @@ def _normalize_image_src(src: str, *, base_url: str) -> str:
     return s
 
 
-def _image_url_from_intlkic(intlkic: str) -> str:
+def _image_url_from_intlkic(intlkic: str) -> str | None:
     """
     Build an Abercrombie image URL from the product card's data-intlkic id.
     Example intlkic: "KIC_116-6054-00163-380".
     """
     if not intlkic:
-        return "None"
+        return None
     kic = intlkic.strip()
     # On Abercrombie listing pages, when the visible <img> only contains a
     # 1x1 placeholder, the real image is typically served under the `_prod1`
@@ -146,8 +162,8 @@ class AbercrombieScraper(BaseScraper):
                 link_elem = card.find("a")
 
             # Image sources: some pages include placeholder tracking pixels (1x1 GIF data URIs)
-            # before the real product image. We scan all <img> tags within the product card
-            # and take the first "non-placeholder" one.
+            # before the real product image. We collect every non-placeholder <img> URL in DOM
+            # order, then dedupe.
             img_candidates: list[str] = []
             for img_tag in card.find_all("img"):
                 if img_tag.has_attr("src"):
@@ -160,20 +176,22 @@ class AbercrombieScraper(BaseScraper):
                     price = f"${parts[1]}"
 
             link = link_elem['href'] if link_elem and link_elem.has_attr('href') else 'None'
-            img = "None"
+            collected: list[str] = []
             for candidate in img_candidates:
                 normalized = _normalize_image_src(candidate, base_url=self.base_url)
-                if normalized != "None":
-                    img = normalized
-                    break
+                if normalized != "None" and _is_usable_abercrombie_cdn_image(normalized):
+                    collected.append(normalized)
+            item_image_links = list(dict.fromkeys(collected))
 
             # Some pages render only a 1x1 placeholder in <img src="..."> and
             # rely on JS to resolve real imagery. In that case, use the card's
             # data-intlkic to reconstruct a deterministic image URL.
-            if img == "None":
+            if not item_image_links:
                 intlkic = card.get("data-intlkic")
                 if intlkic:
-                    img = _image_url_from_intlkic(intlkic)
+                    fallback = _image_url_from_intlkic(intlkic)
+                    if fallback:
+                        item_image_links = [fallback]
 
             if link != 'None' and link.startswith('/'):
                 link = self.base_url + link
@@ -182,7 +200,7 @@ class AbercrombieScraper(BaseScraper):
                 products.append(Product(
                     store=self.store_name,
                     item_name=name,
-                    item_image_link=img,
+                    item_image_links=item_image_links,
                     item_link=link,
                     price=price,
                     tags=tags

@@ -9,6 +9,21 @@ from ..product import Product
 STORE_NAME = "AmericanEagle"
 
 
+def _collect_image_links(card) -> list[str]:
+    """Normalize and dedupe image URLs from the card, DOM order preserved."""
+    urls: list[str] = []
+    for img_elem in card.find_all("img"):
+        if not img_elem.has_attr("src"):
+            continue
+        src = (img_elem["src"] or "").strip()
+        if not src:
+            continue
+        if src.startswith("//"):
+            src = "https:" + src
+        urls.append(src)
+    return list(dict.fromkeys(urls))
+
+
 class AmericanEagleScraper(BaseScraper):
     def __init__(self):
         super().__init__(STORE_NAME)
@@ -34,25 +49,21 @@ class AmericanEagleScraper(BaseScraper):
                 price_elem = card.find("div", class_=lambda c: c and 'price' in c.lower())
 
             link_elem = card.find("a")
-            img_elem = card.find("img")
 
             name = name_elem.text.strip() if name_elem else 'None'
             price = price_elem.text.strip() if price_elem else 'None'
 
             link = link_elem['href'] if link_elem and link_elem.has_attr('href') else 'None'
-            img = img_elem['src'] if img_elem and img_elem.has_attr('src') else 'None'
+            item_image_links = _collect_image_links(card)
 
             if link != 'None' and link.startswith('/'):
                 link = self.base_url + link
-
-            if img != 'None' and img.startswith('//'):
-                img = 'https:' + img
 
             if name != "None":
                 products.append(Product(
                     store=self.store_name,
                     item_name=name,
-                    item_image_link=img,
+                    item_image_links=item_image_links,
                     item_link=link,
                     price=price,
                     tags=tags

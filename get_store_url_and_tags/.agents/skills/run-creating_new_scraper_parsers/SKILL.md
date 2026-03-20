@@ -19,7 +19,9 @@ source .venv/bin/activate   # or: . venv/bin/activate
 
 After activation, use `python main.py` (or `python -m get_store_url_and_tags` when run with `PYTHONPATH` set from repo root).
 
-### ScraperProductng/scrapers/american_eagle.py` → AmericanEagle
+### Scraper layout (examples)
+- `scraping/scrapers/american_eagle.py` → American Eagle
+- `scraping/scrapers/abercrombie.py` → Abercrombie
 - New store → add `scraping/scrapers/<store_slug>.py` and register it in `scraping/scrapers/__init__.py`
 
 The main entry point supports dumping raw HTML with `--dump-item-html` so you can inspect the DOM offline while building a parser.
@@ -48,8 +50,14 @@ Note the selectors for:
 - Product name  
 - Price (sale vs list)  
 - Product URL  
-- ImageProductne `STORE_NAME` (must match the store name in config, e.g. `"Loft"`).
-2. Subclass `BaseScraper`, set `store_name` and `base_url` in `__init__`.
+- Image URL(s)—listing cards may expose **multiple** `<img>` tags per product. Collect all usable absolute (or normalizable) URLs in **DOM order**, **dedupe** while preserving order, and pass them as `item_image_links: list[str]` (use `[]` when none).
+
+---
+
+## Step 3: Implement the scraper
+
+1. Define `STORE_NAME` (must match the store name in config, e.g. `"Loft"`).
+2. Subclass `BaseScraper`, call `super().__init__(STORE_NAME)` and set `self.base_url`.
 3. Implement `parse_html(self, soup, tags)` to find product cards and return a list of `Product` instances.
 
 Example `scraping/scrapers/loft.py`:
@@ -69,7 +77,7 @@ STORE_NAME = "Loft"
 class LoftScraper(BaseScraper):
     def __init__(self):
         super().__init__(STORE_NAME)
-        Productelf.base_url = "https://www.loft.com"
+        self.base_url = "https://www.loft.com"
 
     def parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]:
         products = []
@@ -79,13 +87,13 @@ class LoftScraper(BaseScraper):
             name = ...   # extract from card
             price = ...
             link = ...
-            img = ...
+            image_urls = [...]  # collect from card.find_all("img"), normalize, dedupe
             if link and link.startswith("/"):
                 link = self.base_url + link
             products.append(Product(
                 store=self.store_name,
                 item_name=name,
-                item_image_link=img,
+                item_image_links=image_urls,
                 item_link=link,
                 price=price,
                 tags=tags,
@@ -128,7 +136,7 @@ With venv activated, run the pipeline for the new store and check that parsed fi
 python main.py --stores <StoreName> --max-urls-per-shop 1
 ```
 
-Confirm in the output that item name, price, link, and image are filled and not `None`.
+Confirm in the output that item name, price, link, and at least one image URL are filled when the page provides imagery (or that `item_image_links` is empty only when the DOM has no usable images).
 
 To see which stores have scrapers registered:
 

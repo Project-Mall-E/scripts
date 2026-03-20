@@ -45,7 +45,7 @@ def test_emit_products_text_format(capsys: pytest.CaptureFixture) -> None:
         Product(
             store="S",
             item_name="Shirt",
-            item_image_link="https://x.com/i.jpg",
+            item_image_links=["https://x.com/i.jpg"],
             item_link="https://x.com/p/1",
             price="$20",
             tags=["Tops"],
@@ -64,7 +64,7 @@ def test_emit_products_json_format(capsys: pytest.CaptureFixture) -> None:
         Product(
             store="S",
             item_name="Shirt",
-            item_image_link="https://x.com/i.jpg",
+            item_image_links=["https://x.com/i.jpg"],
             item_link="https://x.com/p/1",
             price="$20",
             tags=["Tops"],
@@ -77,6 +77,7 @@ def test_emit_products_json_format(capsys: pytest.CaptureFixture) -> None:
     assert len(data) == 1
     assert data[0]["item_name"] == "Shirt"
     assert data[0]["price"] == "$20"
+    assert data[0]["item_image_links"] == ["https://x.com/i.jpg"]
 
 
 def test_emit_discovery_summary_empty(caplog: pytest.LogCaptureFixture) -> None:

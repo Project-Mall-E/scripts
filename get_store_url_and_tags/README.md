@@ -130,7 +130,6 @@ To use **Firestore** instead, set:
 For **Supabase** (default), set:
 - `SUPABASE_URL` — e.g. `https://<project>.supabase.co`
 - `SUPABASE_SERVICE_ROLE_KEY` — your project’s service role key
-- `SUPABASE_SERVICE_ROLE_KEY` — your project’s service role key
 
 You can put these in a **`.env` file** in the current working directory (or package root); the app loads `.env` automatically via `python-dotenv` when you run `python -m get_store_url_and_tags`.
 
@@ -198,7 +197,7 @@ Product listing pages are parsed by **per-store scrapers** in `scraping/scrapers
    - Implement `parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]`:
      - Find product cards (e.g. by class or `data-*`).
      - For each card, extract name, price, link, image URL.
-     - Return `List[Product]` with `store`, `item_name`, `item_image_link`, `item_link`, `price`, `tags`.
+     - Return `List[Product]` with `store`, `item_name`, `item_image_links` (`list[str]`, possibly empty), `item_link`, `price`, `tags`.
 
 3. **Register** the scraper in `scraping/scrapers/__init__.py`:
    - `from . import <store_slug>`
