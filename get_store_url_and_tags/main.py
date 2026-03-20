@@ -19,6 +19,7 @@ See README.md for full docs: config options, adding stores, scrapers (parsers), 
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -29,12 +30,29 @@ if __name__ == "__main__":
     if _parent not in [Path(p).resolve() for p in sys.path]:
         sys.path.insert(0, str(_parent))
 
+# Load .env into os.environ so STORAGE_BACKEND, SUPABASE_*, etc. work from a .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from get_store_url_and_tags.app import PipelineOptions, run_pipeline
 from get_store_url_and_tags.config import load_config
 from get_store_url_and_tags.output import emit_products
 from get_store_url_and_tags.utils.logger import get_logger, setup_logging
 
 logger = get_logger(__name__)
+
+
+def _positive_int(value: str) -> int:
+    try:
+        v = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid integer: {value!r}") from exc
+    if v <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return v
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,7 +124,10 @@ Examples:
         "--category",
         type=str,
         default=None,
-        help="Skip discovery; only fetch items for this category path (e.g. Womens/Bottoms/Jeans)"
+        help=(
+            "After discovery, keep URLs whose tag path contains this segment sequence "
+            "(e.g. Bottoms matches Womens/Bottoms/Jeans; New Arrivals matches …/New Arrivals/…)"
+        )
     )
 
     # --- Output ---
@@ -123,7 +144,18 @@ Examples:
     parser.add_argument(
         "--store-in-database",
         action="store_true",
-        help="Persist scraped products to storage backend (e.g. Firestore)"
+        help="Persist scraped products to storage backend (default: Supabase)"
+    )
+    parser.add_argument(
+        "--delete-stale-items",
+        type=_positive_int,
+        metavar="DAYS",
+        default=None,
+        dest="delete_stale_items",
+        help=(
+            "After the run, delete catalog rows with updated_at older than DAYS days "
+            "(Supabase: products table). Use with --stores to limit to those store names."
+        ),
     )
 
     return parser.parse_args()
@@ -146,6 +178,7 @@ def args_to_options(args: argparse.Namespace) -> PipelineOptions:
         dump_item_html=args.dump_item_html,
         max_urls_per_shop=args.max_urls_per_shop,
         store_in_database=args.store_in_database,
+        delete_stale_items_days=args.delete_stale_items,
         debug_dir=Path(__file__).resolve().parent / "debug",
     )
 
@@ -172,6 +205,21 @@ async def main() -> int:
 
     if args.stores:
         logger.info("Filtering to stores: %s", [s.strip() for s in args.stores.split(",")])
+
+    if args.delete_stale_items is None:
+        raw = os.environ.get("DELETE_STALE_ITEMS_DAYS", "").strip()
+        if raw:
+            try:
+                v = int(raw)
+                if v <= 0:
+                    raise ValueError()
+                args.delete_stale_items = v
+            except ValueError:
+                logger.error(
+                    "DELETE_STALE_ITEMS_DAYS must be a positive integer, got %r",
+                    raw,
+                )
+                return 1
 
     options = args_to_options(args)
 

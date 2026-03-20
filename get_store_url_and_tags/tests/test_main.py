@@ -1,5 +1,6 @@
 """Tests for main."""
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -17,6 +18,19 @@ def test_parse_args_defaults() -> None:
     assert args.headless == "true"
     assert args.sequential is False
     assert args.json is False
+    assert args.delete_stale_items is None
+
+
+def test_parse_args_delete_stale_items() -> None:
+    with patch.object(sys, "argv", ["get_store_url_and_tags", "--delete-stale-items", "14"]):
+        args = parse_args()
+    assert args.delete_stale_items == 14
+
+
+def test_parse_args_delete_stale_items_positive_required() -> None:
+    with patch.object(sys, "argv", ["get_store_url_and_tags", "--delete-stale-items", "0"]):
+        with pytest.raises(SystemExit):
+            parse_args()
 
 
 def test_parse_args_stores_and_config() -> None:
@@ -57,6 +71,16 @@ def test_args_to_options_defaults() -> None:
     assert opts.headless is True
     assert opts.dump_urls is False
     assert opts.sequential is False
+    assert opts.delete_stale_items_days is None
+
+
+def test_args_to_options_delete_stale_items() -> None:
+    with patch.object(
+        sys, "argv", ["get_store_url_and_tags", "--delete-stale-items", "30"]
+    ):
+        args = parse_args()
+    opts = args_to_options(args)
+    assert opts.delete_stale_items_days == 30
 
 
 def test_args_to_options_stores_filter() -> None:
@@ -98,6 +122,92 @@ async def test_main_config_not_found() -> None:
         with patch("get_store_url_and_tags.main.load_config", side_effect=FileNotFoundError("no file")):
             with patch("get_store_url_and_tags.main.setup_logging"):
                 exit_code = await main()
+    assert exit_code == 1
+
+
+@pytest.mark.asyncio
+async def test_main_delete_stale_from_env() -> None:
+    from get_store_url_and_tags.app import PipelineResult
+    from get_store_url_and_tags.config import Config
+    from get_store_url_and_tags.main import main
+    from get_store_url_and_tags.models.store import StoreDefinition
+    from get_store_url_and_tags.config import Settings
+
+    captured: dict = {}
+
+    async def capture_run(_c, opts):
+        captured["delete_stale_items_days"] = opts.delete_stale_items_days
+        return PipelineResult(entries=[], products=None)
+
+    with patch.dict(os.environ, {"DELETE_STALE_ITEMS_DAYS": "10"}, clear=False):
+        with patch.object(sys, "argv", ["get_store_url_and_tags"]):
+            with patch("get_store_url_and_tags.main.load_config") as mock_load:
+                mock_load.return_value = Config(
+                    stores=[
+                        StoreDefinition(name="X", homepage="https://x.com", domain="x.com")
+                    ],
+                    settings=Settings(),
+                )
+                with patch("get_store_url_and_tags.main.run_pipeline", side_effect=capture_run):
+                    with patch("get_store_url_and_tags.main.setup_logging"):
+                        exit_code = await main()
+    assert exit_code == 0
+    assert captured["delete_stale_items_days"] == 10
+
+
+@pytest.mark.asyncio
+async def test_main_delete_stale_cli_overrides_env() -> None:
+    from get_store_url_and_tags.app import PipelineResult
+    from get_store_url_and_tags.config import Config
+    from get_store_url_and_tags.main import main
+    from get_store_url_and_tags.models.store import StoreDefinition
+    from get_store_url_and_tags.config import Settings
+
+    captured: dict = {}
+
+    async def capture_run(_c, opts):
+        captured["delete_stale_items_days"] = opts.delete_stale_items_days
+        return PipelineResult(entries=[], products=None)
+
+    with patch.dict(os.environ, {"DELETE_STALE_ITEMS_DAYS": "10"}, clear=False):
+        with patch.object(
+            sys,
+            "argv",
+            ["get_store_url_and_tags", "--delete-stale-items", "3"],
+        ):
+            with patch("get_store_url_and_tags.main.load_config") as mock_load:
+                mock_load.return_value = Config(
+                    stores=[
+                        StoreDefinition(name="X", homepage="https://x.com", domain="x.com")
+                    ],
+                    settings=Settings(),
+                )
+                with patch("get_store_url_and_tags.main.run_pipeline", side_effect=capture_run):
+                    with patch("get_store_url_and_tags.main.setup_logging"):
+                        exit_code = await main()
+    assert exit_code == 0
+    assert captured["delete_stale_items_days"] == 3
+
+
+@pytest.mark.asyncio
+async def test_main_invalid_delete_stale_env() -> None:
+    from get_store_url_and_tags.config import Config
+    from get_store_url_and_tags.main import main
+    from get_store_url_and_tags.models.store import StoreDefinition
+    from get_store_url_and_tags.config import Settings
+
+    with patch.dict(os.environ, {"DELETE_STALE_ITEMS_DAYS": "0"}, clear=False):
+        with patch.object(sys, "argv", ["get_store_url_and_tags"]):
+            with patch("get_store_url_and_tags.main.load_config") as mock_load:
+                mock_load.return_value = Config(
+                    stores=[
+                        StoreDefinition(name="X", homepage="https://x.com", domain="x.com")
+                    ],
+                    settings=Settings(),
+                )
+                with patch("get_store_url_and_tags.main.run_pipeline"):
+                    with patch("get_store_url_and_tags.main.setup_logging"):
+                        exit_code = await main()
     assert exit_code == 1
 
 

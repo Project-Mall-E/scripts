@@ -24,6 +24,7 @@ def test_american_eagle_parse_html_data_qa() -> None:
     assert products[0].price == "$24.99"
     assert products[0].item_link == "https://www.ae.com/p/shirt-1"
     assert products[0].tags == ["Mens", "T-Shirts"]
+    assert products[0].item_descriptions == ["shirt"]
 
 
 def test_american_eagle_parse_html_relative_link() -> None:
@@ -39,6 +40,7 @@ def test_american_eagle_parse_html_relative_link() -> None:
     scraper = AmericanEagleScraper()
     products = scraper.parse_html(soup, [])
     assert products[0].item_link == "https://www.ae.com/p/rel"
+    assert products[0].item_descriptions == ["item"]
 
 
 def test_american_eagle_parse_html_protocol_relative_image() -> None:
@@ -53,7 +55,8 @@ def test_american_eagle_parse_html_protocol_relative_image() -> None:
     soup = BeautifulSoup(html, "html.parser")
     scraper = AmericanEagleScraper()
     products = scraper.parse_html(soup, [])
-    assert products[0].item_image_link == "https://www.ae.com/img/1.jpg"
+    assert products[0].item_image_links == ["https://www.ae.com/img/1.jpg"]
+    assert products[0].item_descriptions == ["item"]
 
 
 def test_american_eagle_parse_html_name_none_skipped() -> None:
@@ -72,6 +75,78 @@ def test_american_eagle_parse_html_name_none_skipped() -> None:
     assert len(products) == 0
 
 
+def test_american_eagle_parse_html_multiple_images() -> None:
+    html = """
+    <div data-qa="product-card">
+      <h3>Multi</h3>
+      <div data-qa="price">$10</div>
+      <a href="/p/1">L</a>
+      <img src="https://www.ae.com/img/first.jpg" />
+      <img src="//www.ae.com/img/second.jpg" />
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    scraper = AmericanEagleScraper()
+    products = scraper.parse_html(soup, [])
+    assert products[0].item_image_links == [
+        "https://www.ae.com/img/first.jpg",
+        "https://www.ae.com/img/second.jpg",
+    ]
+    assert products[0].item_descriptions == ["multi"]
+
+
+def test_american_eagle_parse_html_dedupes_duplicate_image_urls() -> None:
+    html = """
+    <div data-qa="product-card">
+      <h3>Dedupe</h3>
+      <div data-qa="price">$10</div>
+      <a href="/p/1">L</a>
+      <img src="https://www.ae.com/img/x.jpg" />
+      <img src="https://www.ae.com/img/x.jpg" />
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    scraper = AmericanEagleScraper()
+    products = scraper.parse_html(soup, [])
+    assert products[0].item_image_links == ["https://www.ae.com/img/x.jpg"]
+    assert products[0].item_descriptions == ["dedupe"]
+
+
+def test_american_eagle_parse_html_collects_item_descriptions() -> None:
+    html = """
+    <div data-qa="product-card">
+      <h3>AE Jeans</h3>
+      <span data-qa="product-card-color">Light Wash</span>
+      <div data-qa="price">$59.95</div>
+      <a href="/p/jeans-1">L</a>
+      <img src="https://www.ae.com/img/j.jpg" />
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    scraper = AmericanEagleScraper()
+    products = scraper.parse_html(soup, [])
+    assert len(products) == 1
+    assert products[0].item_descriptions == ["light", "wash", "jeans"]
+
+
+def test_american_eagle_modern_tile_merchant_flags_and_title_words() -> None:
+    """Matches UGP Fastboot dump: product-tile + data-testid, no data-qa product-card."""
+    html = """
+    <div class="product-tile _container_1loo4i">
+      <div data-testid="merchant-flags">New</div>
+      <h3 class="product-name" data-testid="name">AE Weekend Sweater Polo</h3>
+      <div data-testid="sale-price">$29.99</div>
+      <a href="/p/polo">L</a>
+      <img src="https://www.ae.com/i.jpg" />
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    scraper = AmericanEagleScraper()
+    products = scraper.parse_html(soup, [])
+    assert len(products) == 1
+    assert products[0].item_descriptions == ["new", "weekend", "sweater", "polo"]
+
+
 def test_american_eagle_parse_html_fallback_product_tile() -> None:
     html = """
     <div class="product-tile">
@@ -86,3 +161,4 @@ def test_american_eagle_parse_html_fallback_product_tile() -> None:
     products = scraper.parse_html(soup, [])
     assert len(products) == 1
     assert "Tile" in products[0].item_name
+    assert products[0].item_descriptions == ["tile", "item"]

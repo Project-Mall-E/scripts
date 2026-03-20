@@ -4,9 +4,80 @@ from typing import List
 from bs4 import BeautifulSoup
 
 from ..base import BaseScraper
+from ..card_descriptions import collect_item_descriptions_from_card
 from ..product import Product
 
 STORE_NAME = "Abercrombie"
+
+# Common 1x1 tracking pixel used by some sites in <img src="...">.
+# Keeping it would later fail any "valid image" check/downloader.
+_PLACEHOLDER_1X1_GIF_DATA_URI_BASE64 = "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw"
+
+
+def _is_placeholder_1x1_gif_data_uri(src: str) -> bool:
+    if not src:
+        return False
+    s = src.strip()
+    return (
+        s.startswith("data:image/gif;base64,")
+        and _PLACEHOLDER_1X1_GIF_DATA_URI_BASE64 in s
+    )
+
+
+def _is_usable_abercrombie_cdn_image(url: str) -> bool:
+    """
+    Omit Scene7 URLs that are not meaningful product photography on a listing card:
+    policy=product-xsmall thumbnails and *_sw swatch variants.
+    """
+    if "img.abercrombie.com/is/image/anf/" not in url:
+        return True
+    if "policy=product-xsmall" in url.lower():
+        return False
+    path = url.split("?", 1)[0]
+    asset = path.rsplit("/", 1)[-1]
+    if asset.endswith("_sw"):
+        return False
+    return True
+
+
+def _normalize_image_src(src: str, *, base_url: str) -> str:
+    """
+    Normalize image URL.
+    Returns "None" when the URL is unusable (placeholder, empty, etc.).
+    """
+    if not src:
+        return "None"
+    s = src.strip()
+    if _is_placeholder_1x1_gif_data_uri(s):
+        return "None"
+    if s.startswith("//"):
+        return "https:" + s
+    if s.startswith("/"):
+        return base_url + s
+    return s
+
+
+def _image_url_from_intlkic(intlkic: str) -> str | None:
+    """
+    Build an Abercrombie image URL from the product card's data-intlkic id.
+    Example intlkic: "KIC_116-6054-00163-380".
+    """
+    if not intlkic:
+        return None
+    kic = intlkic.strip()
+    # On Abercrombie listing pages, when the visible <img> only contains a
+    # 1x1 placeholder, the real image is typically served under the `_prod1`
+    # variant (not `_model1`). Prefer `_prod1` for that fallback.
+    #
+    # If the id already includes a suffix, keep it as-is.
+    if "_prod" in kic or "_model" in kic:
+        image_id = kic
+    else:
+        image_id = f"{kic}_prod1"
+    return (
+        "https://img.abercrombie.com/is/image/anf/"
+        f"{image_id}?policy=product-medium"
+    )
 
 
 def _class_contains(classes, substring: str, case_sensitive: bool = True) -> bool:
@@ -91,7 +162,13 @@ class AbercrombieScraper(BaseScraper):
             if not link_elem:
                 link_elem = card.find("a")
 
-            img_elem = card.find("img")
+            # Image sources: some pages include placeholder tracking pixels (1x1 GIF data URIs)
+            # before the real product image. We collect every non-placeholder <img> URL in DOM
+            # order, then dedupe.
+            img_candidates: list[str] = []
+            for img_tag in card.find_all("img"):
+                if img_tag.has_attr("src"):
+                    img_candidates.append(img_tag["src"])
 
             price = price_elem.text.strip() if price_elem else 'None'
             if "$" in price and len(price) > 3:
@@ -100,20 +177,35 @@ class AbercrombieScraper(BaseScraper):
                     price = f"${parts[1]}"
 
             link = link_elem['href'] if link_elem and link_elem.has_attr('href') else 'None'
-            img = img_elem['src'] if img_elem and img_elem.has_attr('src') else 'None'
-            if img == 'None' and link_elem and link_elem.find("img"):
-                img = link_elem.find("img")['src']
+            collected: list[str] = []
+            for candidate in img_candidates:
+                normalized = _normalize_image_src(candidate, base_url=self.base_url)
+                if normalized != "None" and _is_usable_abercrombie_cdn_image(normalized):
+                    collected.append(normalized)
+            item_image_links = list(dict.fromkeys(collected))
+
+            # Some pages render only a 1x1 placeholder in <img src="..."> and
+            # rely on JS to resolve real imagery. In that case, use the card's
+            # data-intlkic to reconstruct a deterministic image URL.
+            if not item_image_links:
+                intlkic = card.get("data-intlkic")
+                if intlkic:
+                    fallback = _image_url_from_intlkic(intlkic)
+                    if fallback:
+                        item_image_links = [fallback]
 
             if link != 'None' and link.startswith('/'):
                 link = self.base_url + link
 
             if name != 'None' and price != "None":
+                item_descriptions = collect_item_descriptions_from_card(card, name)
                 products.append(Product(
                     store=self.store_name,
                     item_name=name,
-                    item_image_link=img,
+                    item_image_links=item_image_links,
                     item_link=link,
                     price=price,
-                    tags=tags
+                    tags=tags,
+                    item_descriptions=item_descriptions,
                 ))
         return products

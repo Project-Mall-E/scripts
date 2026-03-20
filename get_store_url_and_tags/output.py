@@ -55,7 +55,14 @@ def emit_products(
         for p in products:
             print(f"Store: {p.store:<15} | Price: {p.price:<10} | Name: {p.item_name}")
             print(f"Link : {p.item_link}")
-            print(f"Image: {p.item_image_link}")
+            if p.item_image_links:
+                print("Images:")
+                for u in p.item_image_links:
+                    print(f"  {u}")
+            else:
+                print("Images: (none)")
+            if p.item_descriptions:
+                print(f"Desc : {p.item_descriptions}")
             print(f"Tags : {p.tags}")
             print("-" * 80)
 

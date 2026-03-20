@@ -25,7 +25,7 @@ async def test_run_max_urls_per_shop() -> None:
     product = Product(
         store="StoreA",
         item_name="P",
-        item_image_link="",
+        item_image_links=[],
         item_link="https://a.com/p/1",
         price="$10",
         tags=[],

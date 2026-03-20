@@ -1,12 +1,12 @@
 """Firestore implementation of StorageProvider."""
 
 import base64
-from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .base import StorageProvider
+from .common import item_to_dict
 
 
 def _url_to_document_id(url: str) -> str:
@@ -21,15 +21,6 @@ def _document_id_to_url(doc_id: str) -> str:
     if padding != 4:
         doc_id += "=" * padding
     return base64.urlsafe_b64decode(doc_id.encode("ascii")).decode("utf-8")
-
-
-def _item_to_dict(item: Any) -> dict[str, Any]:
-    """Convert a Product-like item to a plain dict for persistence."""
-    if is_dataclass(item) and not isinstance(item, type):
-        return asdict(item)
-    if isinstance(item, dict):
-        return dict(item)
-    raise TypeError("item must be a dataclass instance or dict")
 
 
 class FirestoreStorageProvider(StorageProvider):
@@ -64,7 +55,7 @@ class FirestoreStorageProvider(StorageProvider):
 
     def upsert(self, item: Any) -> None:
         self._ensure_client()
-        data = _item_to_dict(item)
+        data = item_to_dict(item)
         url = data.get("item_link")
         if not url:
             raise ValueError("item must have an 'item_link' field")

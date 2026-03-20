@@ -15,7 +15,7 @@ class ConcreteScraper(BaseScraper):
             Product(
                 store=self.store_name,
                 item_name="Test",
-                item_image_link="",
+                item_image_links=[],
                 item_link="https://example.com/1",
                 price="$10",
                 tags=tags,

@@ -1,5 +1,5 @@
 ---
-name: Creating New Scraper Parsers
+name: run-creating_new_scraper_parsers 
 description: Instructions for using the HTML dump feature to create new content parsers in the scrapers/ per-store structure. Includes virtualenv setup.
 ---
 
@@ -14,16 +14,14 @@ Commands below assume the project virtualenv is activated. From the package root
 
 ```bash
 cd scripts/get_store_url_and_tags
-source venv/bin/activate   # or: . venv/bin/activate
+source .venv/bin/activate   # or: . venv/bin/activate
 ```
 
 After activation, use `python main.py` (or `python -m get_store_url_and_tags` when run with `PYTHONPATH` set from repo root).
 
-### Scraper layout
-Scrapers live in **one file per store** under `scraping/scrapers/`:
-
+### Scraper layout (examples)
+- `scraping/scrapers/american_eagle.py` → American Eagle
 - `scraping/scrapers/abercrombie.py` → Abercrombie
-- `scraping/scrapers/american_eagle.py` → AmericanEagle
 - New store → add `scraping/scrapers/<store_slug>.py` and register it in `scraping/scrapers/__init__.py`
 
 The main entry point supports dumping raw HTML with `--dump-item-html` so you can inspect the DOM offline while building a parser.
@@ -52,16 +50,15 @@ Note the selectors for:
 - Product name  
 - Price (sale vs list)  
 - Product URL  
-- Image URL  
+- Image URL(s)—listing cards may expose **multiple** `<img>` tags per product. Collect all usable absolute (or normalizable) URLs in **DOM order**, **dedupe** while preserving order, and pass them as `item_image_links: list[str]` (use `[]` when none).
+- **Facet words** (color, fit, fabric, style hints on the card)—collect text from the card, then `collect_item_descriptions_from_card` yields **unique lowercase words** (first-seen order; use `[]` when none). Prefer stable `data-qa` / `data-testid` / `data-cmp` hooks; extend `scraping/card_descriptions.py` if the store needs new attribute patterns.
 
 ---
 
-## Step 3: Add a new scraper file
-
-Create a **new module** under `scraping/scrapers/` using a short, snake_case filename (e.g. `loft.py` for Loft).
+## Step 3: Implement the scraper
 
 1. Define `STORE_NAME` (must match the store name in config, e.g. `"Loft"`).
-2. Subclass `BaseScraper`, set `store_name` and `base_url` in `__init__`.
+2. Subclass `BaseScraper`, call `super().__init__(STORE_NAME)` and set `self.base_url`.
 3. Implement `parse_html(self, soup, tags)` to find product cards and return a list of `Product` instances.
 
 Example `scraping/scrapers/loft.py`:
@@ -91,16 +88,18 @@ class LoftScraper(BaseScraper):
             name = ...   # extract from card
             price = ...
             link = ...
-            img = ...
+            image_urls = [...]  # collect from card.find_all("img"), normalize, dedupe
+            item_descriptions = [...]  # unique words: collect_item_descriptions_from_card(card, name)
             if link and link.startswith("/"):
                 link = self.base_url + link
             products.append(Product(
                 store=self.store_name,
                 item_name=name,
-                item_image_link=img,
+                item_image_links=image_urls,
                 item_link=link,
                 price=price,
                 tags=tags,
+                item_descriptions=item_descriptions,
             ))
         return products
 ```
@@ -140,7 +139,7 @@ With venv activated, run the pipeline for the new store and check that parsed fi
 python main.py --stores <StoreName> --max-urls-per-shop 1
 ```
 
-Confirm in the output that item name, price, link, and image are filled and not `None`.
+Confirm in the output that item name, price, link, and at least one image URL are filled when the page provides imagery (or that `item_image_links` is empty only when the DOM has no usable images).
 
 To see which stores have scrapers registered:
 

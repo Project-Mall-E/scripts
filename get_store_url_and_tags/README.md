@@ -4,49 +4,20 @@ Discovers category URLs from clothing store websites and scrapes product listing
 
 ## Setup (clean install)
 
-You need **Python 3.8+**, a **virtualenv**, the packages in `requirements.txt`, and **Chromium** via Playwright. Steps differ slightly by OS; pick your platform below.
+You need **Python 3.8+**, a **virtualenv**, the packages in `requirements.txt`, and **Chromium** via Playwright. Create the environment as **`get_store_url_and_tags/.venv`** (matches the path used in examples below). Steps differ slightly by OS; pick your platform below.
 
 ### 1. Create a virtualenv and install Python dependencies
 
-**Linux (Ubuntu / Debian)**
+**macOS Linux (Ubuntu / Debian)**
 
 ```bash
 cd /path/to/mall-e/scripts/get_store_url_and_tags
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-**macOS**
-
-```bash
-cd /path/to/mall-e/scripts/get_store_url_and_tags
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
 (If your Mac only has `python`, use `python` instead of `python3`; ensure it’s 3.8+ with `python3 --version` or `python --version`.)
-
-**Windows (PowerShell)**
-
-```powershell
-cd C:\path\to\mall-e\scripts\get_store_url_and_tags
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-**Windows (Command Prompt)**
-
-```cmd
-cd C:\path\to\mall-e\scripts\get_store_url_and_tags
-python -m venv venv
-venv\Scripts\activate.bat
-pip install -r requirements.txt
-```
-
-On Windows, if `python` is not in PATH, try `py -3 -m venv venv` and then `py -3 -m pip install -r requirements.txt`.
 
 ### 2. Install Chromium for Playwright
 
@@ -72,15 +43,6 @@ No system deps needed. Just:
 playwright install chromium
 ```
 
-**Windows**  
-No system deps needed. Just:
-
-```bash
-playwright install chromium
-```
-
-(In PowerShell or Command Prompt, same command.)
-
 ### 3. Run the script
 
 Use the **repo root** so `scripts` is on `PYTHONPATH`:
@@ -89,28 +51,11 @@ Use the **repo root** so `scripts` is on `PYTHONPATH`:
 
 ```bash
 cd /path/to/mall-e
-source scripts/get_store_url_and_tags/venv/bin/activate
+source scripts/get_store_url_and_tags/.venv/bin/activate
 PYTHONPATH=scripts python -m get_store_url_and_tags --stores Abercrombie
 ```
 
-**Windows (PowerShell)**
-
-```powershell
-cd C:\path\to\mall-e
-.\scripts\get_store_url_and_tags\venv\Scripts\Activate.ps1
-$env:PYTHONPATH = "scripts"; python -m get_store_url_and_tags --stores Abercrombie
-```
-
-**Windows (Command Prompt)**
-
-```cmd
-cd C:\path\to\mall-e
-scripts\get_store_url_and_tags\venv\Scripts\activate.bat
-set PYTHONPATH=scripts
-python -m get_store_url_and_tags --stores Abercrombie
-```
-
-Alternatively, run from inside the script directory (Linux/macOS: `PYTHONPATH=. python -m get_store_url_and_tags ...`; Windows: `set PYTHONPATH=.` then `python -m get_store_url_and_tags ...`).
+Alternatively, run from inside the script directory (Linux/macOS: `PYTHONPATH=. python -m get_store_url_and_tags ...`; 
 
 **VS Code / Cursor:** The repo includes `.vscode/launch.json` with run configurations: default (parallel), **sequential** (`--sequential`), and single-store. Use the Run and Debug panel to start with or without the sequential flag.
 
@@ -120,7 +65,7 @@ Alternatively, run from inside the script directory (Linux/macOS: `PYTHONPATH=. 
 
 ### Run from repo root (recommended)
 
-From the repo root with virtualenv activated. **Linux/macOS:** set `PYTHONPATH=scripts` in the same line as the command. **Windows (PowerShell):** `$env:PYTHONPATH="scripts"`; **Windows (CMD):** `set PYTHONPATH=scripts` (then run the `python -m ...` command).
+From the repo root with virtualenv activated. **Linux/macOS:** set `PYTHONPATH=scripts` in the same line as the command. 
 
 ```bash
 # Process all stores in config (discovery + scraping)
@@ -170,12 +115,53 @@ PYTHONPATH=scripts python -m get_store_url_and_tags --dump-item-html --max-urls-
 | `--headless` | `true` | Run browser headless (`true` / `false`) |
 | `--disable-fetch-clothing-items` | false | Only run discovery; do not scrape products |
 | `--sequential` | false | Run discovery and scraping one store at a time (no parallel stores) |
-| `--category` | (none) | Skip discovery; only fetch items for this category path (e.g. `Womens/Bottoms/Jeans`) |
+| `--category` | (none) | After discovery, keep URLs whose normalized tags contain this path as **consecutive** segments (e.g. `Bottoms` matches `Womens/Bottoms` and `Womens/Bottoms/Jeans`|
 | `--json` | false | Emit products as JSON to stdout |
 | `--dump-item-html` | false | Save product listing page HTML to `debug/<safe_url>-dump.html` for parser development |
 | `--max-urls-per-shop` | (none) | Cap number of category URLs scraped per store (for debugging) |
 | `--verbose` / `-v` | false | DEBUG logging |
-| `--store-in-database` | false | Persist scraped products to Firestore (or configured backend) |
+| `--store-in-database` | false | Persist scraped products to the configured storage backend (see below) |
+| `--delete-stale-items DAYS` | (none) | After the run, delete catalog rows not updated within the last `DAYS` days (see **Stale product cleanup** below) |
+
+Each `--category` segment is normalized the same way as discovery tags (synonyms / casing). Tags on each URL are stored in **hierarchy order** (see `tagging/normalizer.py`), so multi-segment filters must appear in that same order as consecutive segments—single-segment filters (`New Arrivals`, `Bottoms`) are the most forgiving.
+
+**Storage backends (when using `--store-in-database`):** The backend is chosen by the `STORAGE_BACKEND` environment variable. Default is **Supabase**.
+
+To use **Firestore** instead, set:
+- `STORAGE_BACKEND=firestore` (requires `secrets/firebase-serviceaccount.json`)
+
+For **Supabase** (default), set:
+- `SUPABASE_URL` — e.g. `https://<project>.supabase.co`
+- `SUPABASE_SERVICE_ROLE_KEY` — your project’s service role key
+
+Optional default for stale cleanup (used when `--delete-stale-items` is **not** passed on the CLI; CLI wins if both are set):
+
+- `DELETE_STALE_ITEMS_DAYS` — positive integer; same meaning as `--delete-stale-items`
+
+You can put these in a **`.env` file** in the current working directory (or package root); the app loads `.env` automatically via `python-dotenv` when you run `python -m get_store_url_and_tags`.
+
+### Stale product cleanup (`--delete-stale-items`)
+
+After discovery/scrape (and after upserts when `--store-in-database` is enabled), you can delete **Supabase** rows in `public.products` whose `updated_at` is older than **DAYS** days (UTC cutoff = now − DAYS days). `updated_at` is maintained by the DB when a row is upserted via `upsert_product_from_json`. Related `product_tags` rows are removed by `ON DELETE CASCADE`; unused `tags` rows may remain.
+
+- **Scope:** If you pass `--stores A,B`, only products with `store` in that list are deleted. With no `--stores`, stale rows for **all** stores are eligible.
+- **Backend:** Implemented for **Supabase** only today. With `STORAGE_BACKEND=firestore`, the run logs an error and skips the delete (`NotImplementedError`).
+- **Credentials:** Uses the same env vars as upsert (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`); the service role is required to delete past RLS.
+
+Example:
+
+```bash
+PYTHONPATH=scripts python -m get_store_url_and_tags --stores Abercrombie --store-in-database --delete-stale-items 14
+```
+
+**Database setup:** Apply schemas from this repo’s [`../supabase/`](../supabase/README.md) in order: [`users.sql`](../supabase/schemas/users.sql) → [`stores.sql`](../supabase/schemas/stores.sql) → [`products.sql`](../supabase/schemas/products.sql), or run migrations from [`../supabase/migrations/`](../supabase/migrations/). That defines:
+
+- Tables `products` (with `item_link` unique, `item_image_links`, `item_descriptions`, generated `search_vector`), `tags`, and `product_tags`
+- Tables **`stores`** (unique store `name`) and **`store_favorites`** (`user_id` + `store_name`) for listing supported retailers and per-user favorites
+- View `products_with_tags` (`security_invoker`) for reads
+- RPC **`upsert_product_from_json(p jsonb)`** (idempotent on `item_link`; syncs tags; ensures a row in **`stores`** when `store` in the JSON is non-empty; accepts the same JSON shape as `Product` / `item_to_dict()`)
+
+**Auth / RLS:** The scraper should use **`SUPABASE_SERVICE_ROLE_KEY`** only on trusted runners. That key **bypasses RLS** and is required to execute **`upsert_product_from_json`**. Signed-in app clients should use the **`authenticated`** (or **`anon`**) key: RLS grants **`authenticated`** read access (`SELECT`) to the catalog, **`stores`**, and each user’s own **`store_favorites`** rows (`insert`/`delete` favorites as that user). **`anon`** has no catalog or store list access unless you add policies. Do not ship the service role key in end-user apps. See [`../supabase/README.md`](../supabase/README.md) for example queries (URL, full text, tags, description tokens, favorites).
 
 ### Config file: `config/stores.json`
 
@@ -238,8 +224,8 @@ Product listing pages are parsed by **per-store scrapers** in `scraping/scrapers
    - Subclass `BaseScraper`, call `super().__init__(STORE_NAME)` and set `self.base_url`.
    - Implement `parse_html(self, soup: BeautifulSoup, tags: list[str]) -> List[Product]`:
      - Find product cards (e.g. by class or `data-*`).
-     - For each card, extract name, price, link, image URL.
-     - Return `List[Product]` with `store`, `item_name`, `item_image_link`, `item_link`, `price`, `tags`.
+     - For each card, extract name, price, link, image URLs, and optional facet text; tokenize into **unique lowercase words** in `item_descriptions` (`list[str]`, possibly empty).
+     - Return `List[Product]` with `store`, `item_name`, `item_image_links` (`list[str]`, possibly empty), `item_link`, `price`, `tags`, `item_descriptions` (`list[str]` of unique words, possibly empty; defaults to `[]`).
 
 3. **Register** the scraper in `scraping/scrapers/__init__.py`:
    - `from . import <store_slug>`
@@ -321,11 +307,9 @@ With the same virtualenv you use for the script (or a dedicated one), install th
 
 ```bash
 cd /path/to/mall-e/scripts/get_store_url_and_tags
-source venv/bin/activate   # or: .\venv\Scripts\Activate.ps1 on Windows
+source .venv/bin/activate
 pip install -r requirements-test.txt
 ```
-
-(`requirements-test.txt` adds `pytest`, `pytest-cov`, and `pytest-asyncio`; the main `requirements.txt` is still required for the package itself.)
 
 ### Run tests
 
@@ -335,7 +319,7 @@ From the **repo root** (so `get_store_url_and_tags` is importable via `PYTHONPAT
 
 ```bash
 cd /path/to/mall-e
-source scripts/get_store_url_and_tags/venv/bin/activate
+source scripts/get_store_url_and_tags/.venv/bin/activate
 PYTHONPATH=scripts python -m pytest scripts/get_store_url_and_tags/tests/ -v
 ```
 
@@ -350,17 +334,10 @@ PYTHONPATH=scripts python -m pytest scripts/get_store_url_and_tags/tests/ -v \
 
 ```bash
 cd /path/to/mall-e/scripts
-source get_store_url_and_tags/venv/bin/activate
+source get_store_url_and_tags/.venv/bin/activate
 PYTHONPATH=. python -m pytest get_store_url_and_tags/tests/ -v --cov=get_store_url_and_tags --cov-report=term-missing
 ```
 
-**Windows (PowerShell)**
-
-```powershell
-cd C:\path\to\mall-e
-.\scripts\get_store_url_and_tags\venv\Scripts\Activate.ps1
-$env:PYTHONPATH = "scripts"; python -m pytest scripts/get_store_url_and_tags/tests/ -v --cov=get_store_url_and_tags --cov-report=term-missing
-```
 
 Tests are configured in `pytest.ini` (e.g. `asyncio_mode = auto`, `testpaths = tests`). Run a single file or test with:
 

@@ -1,6 +1,8 @@
 """High-level pipeline: discovery -> optional scraping -> optional storage. Used by main."""
 
+import os
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -8,9 +10,40 @@ from .config import Config, load_config
 from .models import Product, StoreLink
 from .orchestrator import DiscoveryOrchestrator
 from .output import dump_discovered_urls, emit_discovery_summary, emit_products
+from .tagging.normalizer import TagNormalizer
 from .utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_tag_normalizer = TagNormalizer()
+
+
+def _category_path_segments(category: str) -> List[str]:
+    """Split CLI category path into segments; normalize each via TagNormalizer when possible."""
+    raw = [p.strip() for p in category.split("/") if p.strip()]
+    out: List[str] = []
+    for part in raw:
+        canonical = _tag_normalizer.normalize_tag(part)
+        out.append(canonical if canonical is not None else part)
+    return out
+
+
+def _tags_match_category_filter(entry_tags: List[str], needle: List[str]) -> bool:
+    """
+    True if needle appears as a contiguous subsequence of entry_tags (segment equality, case-insensitive).
+    So ``Bottoms`` matches ``Womens/Bottoms/Jeans``, and ``Womens/Bottoms`` matches that path and ``Womens/Bottoms``.
+    """
+    if not needle:
+        return True
+    n = len(needle)
+    if n > len(entry_tags):
+        return False
+    for i in range(len(entry_tags) - n + 1):
+        if all(
+            entry_tags[i + j].casefold() == needle[j].casefold() for j in range(n)
+        ):
+            return True
+    return False
 
 
 @dataclass
@@ -24,11 +57,12 @@ class PipelineOptions:
     dump_urls: bool = False  # --dump-store-urls: write discovered URLs to debug/
     disable_fetch_clothing_items: bool = False  # discovery only, no scraping
     sequential: bool = False  # --sequential: run discovery and scraping one store at a time
-    category: Optional[str] = None  # e.g. "Womens/Bottoms/Jeans"; skip discovery, scrape only this
+    category: Optional[str] = None  # e.g. "Bottoms" or "Womens/Bottoms/Jeans"; filter discovery entries
     output_json: bool = False
     dump_item_html: bool = False  # save listing page HTML to debug/ for parser development
     max_urls_per_shop: Optional[int] = None  # cap URLs per store (verification/debug)
     store_in_database: bool = False
+    delete_stale_items_days: Optional[int] = None  # if set, delete products older than this many days
     debug_dir: Optional[Path] = None  # where to write dump_store_urls / dump_item_html
 
 
@@ -63,8 +97,8 @@ async def run_pipeline(
     logger.info("Discovery phase complete: %d entries", len(entries))
 
     if options.category:
-        category_tags = options.category.split("/")
-        entries = [e for e in entries if e.tags == category_tags]
+        category_tags = _category_path_segments(options.category)
+        entries = [e for e in entries if _tags_match_category_filter(e.tags, category_tags)]
         if not entries:
             raise ValueError(
                 f"Category '{options.category}' not found or filtered out after discovery."
@@ -107,10 +141,45 @@ async def run_pipeline(
                 except Exception as e:
                     logger.error("Failed to persist product %s: %s", p.item_link, e)
 
+    if options.delete_stale_items_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=options.delete_stale_items_days)
+        provider = _get_storage_provider()
+        store_scope = options.stores_filter
+        try:
+            removed = provider.delete_items_not_updated_since(cutoff, store_names=store_scope)
+        except NotImplementedError as e:
+            logger.error(
+                "Stale product delete is not supported for this storage backend (%s)", e
+            )
+        except Exception as e:
+            logger.error("Stale product delete failed: %s", e, exc_info=True)
+        else:
+            scope_msg = (
+                f"stores {store_scope!r}" if store_scope else "all stores"
+            )
+            logger.info(
+                "Stale product delete: removed %d row(s) (%s; updated_at before %s)",
+                removed,
+                scope_msg,
+                cutoff.isoformat(),
+            )
+
     return PipelineResult(entries=entries, products=products)
 
 
 def _get_storage_provider():
-    """Return the configured storage provider (e.g. Firestore). Used when store_in_database is True."""
-    from .storage import FirestoreStorageProvider
-    return FirestoreStorageProvider()
+    """Return the configured storage provider (Supabase or Firestore).
+
+    Default is Supabase unless `STORAGE_BACKEND=firestore`.
+    Used for `--store-in-database` upserts and for `--delete-stale-items` when configured.
+    """
+    from .storage import FirestoreStorageProvider, SupabaseStorageProvider
+    backend = os.environ.get("STORAGE_BACKEND", "").strip().lower()
+    if backend == "firestore":
+        return FirestoreStorageProvider()
+    # Default to Supabase. Note: SupabaseStorageProvider will validate SUPABASE_URL /
+    # SUPABASE_SERVICE_ROLE_KEY when first used (e.g. `upsert()`).
+    return SupabaseStorageProvider(
+        url=os.environ.get("SUPABASE_URL"),
+        key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+    )

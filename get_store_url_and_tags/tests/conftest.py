@@ -56,10 +56,11 @@ def sample_product(sample_store_definition: StoreDefinition) -> Product:
     return Product(
         store=sample_store_definition.name,
         item_name="Test Shirt",
-        item_image_link="https://www.teststore.com/img/shirt.jpg",
+        item_image_links=["https://www.teststore.com/img/shirt.jpg"],
         item_link="https://www.teststore.com/p/shirt-1",
         price="$29.99",
         tags=["Womens", "Tops"],
+        item_descriptions=["cotton", "crew", "neck"],
     )
 
 
