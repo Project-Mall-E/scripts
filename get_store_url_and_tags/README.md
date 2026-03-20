@@ -133,7 +133,14 @@ For **Supabase** (default), set:
 
 You can put these in a **`.env` file** in the current working directory (or package root); the app loads `.env` automatically via `python-dotenv` when you run `python -m get_store_url_and_tags`.
 
-The Supabase backend expects the database to have the `upsert_product_from_json(p jsonb)` RPC and the `products_with_tags` view (normalized products + tags schema). Add a unique constraint on `products.item_link` and implement the upsert RPC as described in the project plan.
+**Database setup:** Apply schemas from this repo’s [`../supabase/`](../supabase/README.md) in order: [`users.sql`](../supabase/schemas/users.sql) → [`stores.sql`](../supabase/schemas/stores.sql) → [`products.sql`](../supabase/schemas/products.sql), or run migrations from [`../supabase/migrations/`](../supabase/migrations/). That defines:
+
+- Tables `products` (with `item_link` unique, `item_image_links`, `item_descriptions`, generated `search_vector`), `tags`, and `product_tags`
+- Tables **`stores`** (unique store `name`) and **`store_favorites`** (`user_id` + `store_name`) for listing supported retailers and per-user favorites
+- View `products_with_tags` (`security_invoker`) for reads
+- RPC **`upsert_product_from_json(p jsonb)`** (idempotent on `item_link`; syncs tags; ensures a row in **`stores`** when `store` in the JSON is non-empty; accepts the same JSON shape as `Product` / `item_to_dict()`)
+
+**Auth / RLS:** The scraper should use **`SUPABASE_SERVICE_ROLE_KEY`** only on trusted runners. That key **bypasses RLS** and is required to execute **`upsert_product_from_json`**. Signed-in app clients should use the **`authenticated`** (or **`anon`**) key: RLS grants **`authenticated`** read access (`SELECT`) to the catalog, **`stores`**, and each user’s own **`store_favorites`** rows (`insert`/`delete` favorites as that user). **`anon`** has no catalog or store list access unless you add policies. Do not ship the service role key in end-user apps. See [`../supabase/README.md`](../supabase/README.md) for example queries (URL, full text, tags, description tokens, favorites).
 
 ### Config file: `config/stores.json`
 

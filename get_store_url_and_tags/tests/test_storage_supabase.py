@@ -42,6 +42,8 @@ def test_supabase_upsert_calls_rpc(sample_product: Product) -> None:
         assert call_payload["p"]["item_link"] == sample_product.item_link
         assert call_payload["p"]["store"] == sample_product.store
         assert call_payload["p"]["tags"] == sample_product.tags
+        assert call_payload["p"]["item_image_links"] == sample_product.item_image_links
+        assert call_payload["p"]["item_descriptions"] == sample_product.item_descriptions
         mock_execute.assert_called_once()
 
 
