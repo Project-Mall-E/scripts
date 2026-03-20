@@ -54,7 +54,3 @@ Products from favorite stores (after loading favorite names in the app):
 select * from public.products_with_tags
 where store = any (:favorite_store_names);
 ```
-
-## Migrations
-
-[`migrations/20260319120200_stores_and_favorites.sql`](migrations/20260319120200_stores_and_favorites.sql) adds `stores`, `store_favorites`, RLS, and replaces `upsert_product_from_json`. It assumes `profiles` and the product catalog from earlier migrations already exist.
