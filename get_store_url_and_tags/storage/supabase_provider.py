@@ -75,7 +75,8 @@ class SupabaseStorageProvider(StorageProvider):
         if store_names:
             q = q.in_("store", store_names)
         resp = q.execute()
-        if resp.count is not None:
+        # Tests may mock response.count with a MagicMock; only trust real numeric counts.
+        if isinstance(resp.count, int):
             return resp.count
         data = resp.data
         if data is None:

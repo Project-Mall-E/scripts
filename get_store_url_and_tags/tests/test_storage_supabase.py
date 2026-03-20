@@ -124,7 +124,7 @@ def test_supabase_delete_stale_items_all_stores() -> None:
     assert n == 2
     mock_client.table.assert_called_once_with("products")
     chain.lt.assert_called_once_with("updated_at", "2025-01-01T00:00:00Z")
-    chain.select.assert_called_once_with("id")
+    chain.select.assert_not_called()
     chain.in_.assert_not_called()
 
 

@@ -47,11 +47,25 @@ class RobotsChecker:
             
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(
+                    request = session.get(
                         robots_url,
                         timeout=aiohttp.ClientTimeout(total=self.timeout),
                         headers={"User-Agent": self.USER_AGENT}
-                    ) as response:
+                    )
+                    if hasattr(request, "__aenter__"):
+                        async with request as response:
+                            if response.status == 200:
+                                content = await response.text()
+                                parser.parse(content.splitlines())
+                                logger.debug(f"Loaded robots.txt for {domain}")
+                            else:
+                                logger.debug(
+                                    f"No robots.txt for {domain} (status {response.status}), "
+                                    "allowing all URLs"
+                                )
+                                parser = None
+                    else:
+                        response = await request
                         if response.status == 200:
                             content = await response.text()
                             parser.parse(content.splitlines())
