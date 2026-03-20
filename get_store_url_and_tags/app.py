@@ -10,9 +10,40 @@ from .config import Config, load_config
 from .models import Product, StoreLink
 from .orchestrator import DiscoveryOrchestrator
 from .output import dump_discovered_urls, emit_discovery_summary, emit_products
+from .tagging.normalizer import TagNormalizer
 from .utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_tag_normalizer = TagNormalizer()
+
+
+def _category_path_segments(category: str) -> List[str]:
+    """Split CLI category path into segments; normalize each via TagNormalizer when possible."""
+    raw = [p.strip() for p in category.split("/") if p.strip()]
+    out: List[str] = []
+    for part in raw:
+        canonical = _tag_normalizer.normalize_tag(part)
+        out.append(canonical if canonical is not None else part)
+    return out
+
+
+def _tags_match_category_filter(entry_tags: List[str], needle: List[str]) -> bool:
+    """
+    True if needle appears as a contiguous subsequence of entry_tags (segment equality, case-insensitive).
+    So ``Bottoms`` matches ``Womens/Bottoms/Jeans``, and ``Womens/Bottoms`` matches that path and ``Womens/Bottoms``.
+    """
+    if not needle:
+        return True
+    n = len(needle)
+    if n > len(entry_tags):
+        return False
+    for i in range(len(entry_tags) - n + 1):
+        if all(
+            entry_tags[i + j].casefold() == needle[j].casefold() for j in range(n)
+        ):
+            return True
+    return False
 
 
 @dataclass
@@ -26,7 +57,7 @@ class PipelineOptions:
     dump_urls: bool = False  # --dump-store-urls: write discovered URLs to debug/
     disable_fetch_clothing_items: bool = False  # discovery only, no scraping
     sequential: bool = False  # --sequential: run discovery and scraping one store at a time
-    category: Optional[str] = None  # e.g. "Womens/Bottoms/Jeans"; skip discovery, scrape only this
+    category: Optional[str] = None  # e.g. "Bottoms" or "Womens/Bottoms/Jeans"; filter discovery entries
     output_json: bool = False
     dump_item_html: bool = False  # save listing page HTML to debug/ for parser development
     max_urls_per_shop: Optional[int] = None  # cap URLs per store (verification/debug)
@@ -66,8 +97,8 @@ async def run_pipeline(
     logger.info("Discovery phase complete: %d entries", len(entries))
 
     if options.category:
-        category_tags = options.category.split("/")
-        entries = [e for e in entries if e.tags == category_tags]
+        category_tags = _category_path_segments(options.category)
+        entries = [e for e in entries if _tags_match_category_filter(e.tags, category_tags)]
         if not entries:
             raise ValueError(
                 f"Category '{options.category}' not found or filtered out after discovery."

@@ -124,7 +124,10 @@ Examples:
         "--category",
         type=str,
         default=None,
-        help="Skip discovery; only fetch items for this category path (e.g. Womens/Bottoms/Jeans)"
+        help=(
+            "After discovery, keep URLs whose tag path contains this segment sequence "
+            "(e.g. Bottoms matches Womens/Bottoms/Jeans; New Arrivals matches …/New Arrivals/…)"
+        )
     )
 
     # --- Output ---

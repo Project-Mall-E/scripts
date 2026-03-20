@@ -129,6 +129,63 @@ async def test_run_pipeline_category_filter() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_pipeline_category_filter_prefix_and_single_segment() -> None:
+    """Partial path matches longer tag paths; one segment matches anywhere in the list."""
+    config = _make_config()
+    options = PipelineOptions(
+        stores_filter=["TestStore"],
+        category="Womens/Bottoms",
+        disable_fetch_clothing_items=True,
+        debug_dir=Path("/tmp/test_debug"),
+    )
+    exact = StoreLink(name="TestStore", url="https://test.com/w/b", tags=["Womens", "Bottoms"])
+    child = StoreLink(
+        name="TestStore",
+        url="https://test.com/w/b/j",
+        tags=["Womens", "Bottoms", "Jeans"],
+    )
+    other = StoreLink(name="TestStore", url="https://test.com/m/j", tags=["Mens", "Jeans"])
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[exact, child, other])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        result = await run_pipeline(config, options)
+    assert len(result.entries) == 2
+    urls = {e.url for e in result.entries}
+    assert urls == {exact.url, child.url}
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_category_filter_new_arrivals_segment() -> None:
+    config = _make_config()
+    options = PipelineOptions(
+        stores_filter=["TestStore"],
+        category="New Arrivals",
+        disable_fetch_clothing_items=True,
+        debug_dir=Path("/tmp/test_debug"),
+    )
+    na_branch = StoreLink(
+        name="TestStore",
+        url="https://test.com/new/w/bottoms",
+        tags=["Womens", "Bottoms", "New Arrivals"],
+    )
+    no_na = StoreLink(
+        name="TestStore",
+        url="https://test.com/w/bottoms",
+        tags=["Womens", "Bottoms"],
+    )
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[na_branch, no_na])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        result = await run_pipeline(config, options)
+    assert len(result.entries) == 1
+    assert result.entries[0].url == na_branch.url
+
+
+@pytest.mark.asyncio
 async def test_run_pipeline_category_no_match_raises() -> None:
     config = _make_config()
     options = PipelineOptions(

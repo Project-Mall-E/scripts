@@ -63,10 +63,20 @@ class SupabaseStorageProvider(StorageProvider):
         cutoff_utc = cutoff_utc.astimezone(timezone.utc)
         cutoff_iso = cutoff_utc.isoformat().replace("+00:00", "Z")
 
-        q = self._client.table("products").delete().lt("updated_at", cutoff_iso)
+        # postgrest-py v2+: delete() returns SyncFilterRequestBuilder — no chained .select().
+        # Use count=exact + minimal return to get a delete count without row bodies.
+        from postgrest.types import CountMethod, ReturnMethod
+
+        q = (
+            self._client.table("products")
+            .delete(count=CountMethod.exact, returning=ReturnMethod.minimal)
+            .lt("updated_at", cutoff_iso)
+        )
         if store_names:
             q = q.in_("store", store_names)
-        resp = q.select("id").execute()
+        resp = q.execute()
+        if resp.count is not None:
+            return resp.count
         data = resp.data
         if data is None:
             return 0

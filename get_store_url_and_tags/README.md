@@ -4,7 +4,7 @@ Discovers category URLs from clothing store websites and scrapes product listing
 
 ## Setup (clean install)
 
-You need **Python 3.8+**, a **virtualenv**, the packages in `requirements.txt`, and **Chromium** via Playwright. Steps differ slightly by OS; pick your platform below.
+You need **Python 3.8+**, a **virtualenv**, the packages in `requirements.txt`, and **Chromium** via Playwright. Create the environment as **`get_store_url_and_tags/.venv`** (matches the path used in examples below). Steps differ slightly by OS; pick your platform below.
 
 ### 1. Create a virtualenv and install Python dependencies
 
@@ -12,8 +12,8 @@ You need **Python 3.8+**, a **virtualenv**, the packages in `requirements.txt`, 
 
 ```bash
 cd /path/to/mall-e/scripts/get_store_url_and_tags
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -51,7 +51,7 @@ Use the **repo root** so `scripts` is on `PYTHONPATH`:
 
 ```bash
 cd /path/to/mall-e
-source scripts/get_store_url_and_tags/venv/bin/activate
+source scripts/get_store_url_and_tags/.venv/bin/activate
 PYTHONPATH=scripts python -m get_store_url_and_tags --stores Abercrombie
 ```
 
@@ -115,13 +115,15 @@ PYTHONPATH=scripts python -m get_store_url_and_tags --dump-item-html --max-urls-
 | `--headless` | `true` | Run browser headless (`true` / `false`) |
 | `--disable-fetch-clothing-items` | false | Only run discovery; do not scrape products |
 | `--sequential` | false | Run discovery and scraping one store at a time (no parallel stores) |
-| `--category` | (none) | Skip discovery; only fetch items for this category path (e.g. `Womens/Bottoms/Jeans`) |
+| `--category` | (none) | After discovery, keep URLs whose normalized tags contain this path as **consecutive** segments (e.g. `Bottoms` matches `Womens/Bottoms` and `Womens/Bottoms/Jeans`|
 | `--json` | false | Emit products as JSON to stdout |
 | `--dump-item-html` | false | Save product listing page HTML to `debug/<safe_url>-dump.html` for parser development |
 | `--max-urls-per-shop` | (none) | Cap number of category URLs scraped per store (for debugging) |
 | `--verbose` / `-v` | false | DEBUG logging |
 | `--store-in-database` | false | Persist scraped products to the configured storage backend (see below) |
 | `--delete-stale-items DAYS` | (none) | After the run, delete catalog rows not updated within the last `DAYS` days (see **Stale product cleanup** below) |
+
+Each `--category` segment is normalized the same way as discovery tags (synonyms / casing). Tags on each URL are stored in **hierarchy order** (see `tagging/normalizer.py`), so multi-segment filters must appear in that same order as consecutive segments—single-segment filters (`New Arrivals`, `Bottoms`) are the most forgiving.
 
 **Storage backends (when using `--store-in-database`):** The backend is chosen by the `STORAGE_BACKEND` environment variable. Default is **Supabase**.
 
@@ -305,7 +307,7 @@ With the same virtualenv you use for the script (or a dedicated one), install th
 
 ```bash
 cd /path/to/mall-e/scripts/get_store_url_and_tags
-source venv/bin/activate   #
+source .venv/bin/activate
 pip install -r requirements-test.txt
 ```
 
@@ -317,7 +319,7 @@ From the **repo root** (so `get_store_url_and_tags` is importable via `PYTHONPAT
 
 ```bash
 cd /path/to/mall-e
-source scripts/get_store_url_and_tags/venv/bin/activate
+source scripts/get_store_url_and_tags/.venv/bin/activate
 PYTHONPATH=scripts python -m pytest scripts/get_store_url_and_tags/tests/ -v
 ```
 
@@ -332,7 +334,7 @@ PYTHONPATH=scripts python -m pytest scripts/get_store_url_and_tags/tests/ -v \
 
 ```bash
 cd /path/to/mall-e/scripts
-source get_store_url_and_tags/venv/bin/activate
+source get_store_url_and_tags/.venv/bin/activate
 PYTHONPATH=. python -m pytest get_store_url_and_tags/tests/ -v --cov=get_store_url_and_tags --cov-report=term-missing
 ```
 
