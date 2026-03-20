@@ -1,6 +1,7 @@
 """Supabase implementation of StorageProvider using RPC and products_with_tags view."""
 
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from .base import StorageProvider
@@ -51,3 +52,22 @@ class SupabaseStorageProvider(StorageProvider):
             return None
         row = resp.data[0]
         return dict(row) if isinstance(row, dict) else row
+
+    def delete_items_not_updated_since(
+        self, cutoff_utc: datetime, store_names: list[str] | None = None
+    ) -> int:
+        """Delete from ``products`` where ``updated_at`` < cutoff; ``product_tags`` cascade."""
+        self._ensure_client()
+        if cutoff_utc.tzinfo is None:
+            cutoff_utc = cutoff_utc.replace(tzinfo=timezone.utc)
+        cutoff_utc = cutoff_utc.astimezone(timezone.utc)
+        cutoff_iso = cutoff_utc.isoformat().replace("+00:00", "Z")
+
+        q = self._client.table("products").delete().lt("updated_at", cutoff_iso)
+        if store_names:
+            q = q.in_("store", store_names)
+        resp = q.select("id").execute()
+        data = resp.data
+        if data is None:
+            return 0
+        return len(data)

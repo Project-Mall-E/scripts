@@ -121,6 +121,7 @@ PYTHONPATH=scripts python -m get_store_url_and_tags --dump-item-html --max-urls-
 | `--max-urls-per-shop` | (none) | Cap number of category URLs scraped per store (for debugging) |
 | `--verbose` / `-v` | false | DEBUG logging |
 | `--store-in-database` | false | Persist scraped products to the configured storage backend (see below) |
+| `--delete-stale-items DAYS` | (none) | After the run, delete catalog rows not updated within the last `DAYS` days (see **Stale product cleanup** below) |
 
 **Storage backends (when using `--store-in-database`):** The backend is chosen by the `STORAGE_BACKEND` environment variable. Default is **Supabase**.
 
@@ -131,7 +132,25 @@ For **Supabase** (default), set:
 - `SUPABASE_URL` — e.g. `https://<project>.supabase.co`
 - `SUPABASE_SERVICE_ROLE_KEY` — your project’s service role key
 
+Optional default for stale cleanup (used when `--delete-stale-items` is **not** passed on the CLI; CLI wins if both are set):
+
+- `DELETE_STALE_ITEMS_DAYS` — positive integer; same meaning as `--delete-stale-items`
+
 You can put these in a **`.env` file** in the current working directory (or package root); the app loads `.env` automatically via `python-dotenv` when you run `python -m get_store_url_and_tags`.
+
+### Stale product cleanup (`--delete-stale-items`)
+
+After discovery/scrape (and after upserts when `--store-in-database` is enabled), you can delete **Supabase** rows in `public.products` whose `updated_at` is older than **DAYS** days (UTC cutoff = now − DAYS days). `updated_at` is maintained by the DB when a row is upserted via `upsert_product_from_json`. Related `product_tags` rows are removed by `ON DELETE CASCADE`; unused `tags` rows may remain.
+
+- **Scope:** If you pass `--stores A,B`, only products with `store` in that list are deleted. With no `--stores`, stale rows for **all** stores are eligible.
+- **Backend:** Implemented for **Supabase** only today. With `STORAGE_BACKEND=firestore`, the run logs an error and skips the delete (`NotImplementedError`).
+- **Credentials:** Uses the same env vars as upsert (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`); the service role is required to delete past RLS.
+
+Example:
+
+```bash
+PYTHONPATH=scripts python -m get_store_url_and_tags --stores Abercrombie --store-in-database --delete-stale-items 14
+```
 
 **Database setup:** Apply schemas from this repo’s [`../supabase/`](../supabase/README.md) in order: [`users.sql`](../supabase/schemas/users.sql) → [`stores.sql`](../supabase/schemas/stores.sql) → [`products.sql`](../supabase/schemas/products.sql), or run migrations from [`../supabase/migrations/`](../supabase/migrations/). That defines:
 

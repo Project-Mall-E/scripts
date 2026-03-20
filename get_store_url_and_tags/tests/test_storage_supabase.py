@@ -1,6 +1,7 @@
 """Tests for storage.supabase_provider (mocked Supabase client)."""
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -99,3 +100,53 @@ def test_supabase_get_by_url_not_found() -> None:
         provider._client = mock_client
 
         assert provider.get_by_url("https://example.com/missing") is None
+
+
+def test_supabase_delete_stale_items_all_stores() -> None:
+    chain = MagicMock()
+    chain.lt.return_value = chain
+    chain.select.return_value = chain
+    chain.execute.return_value = MagicMock(data=[{"id": 1}, {"id": 2}])
+
+    table_ret = MagicMock()
+    table_ret.delete.return_value = chain
+
+    mock_client = MagicMock()
+    mock_client.table.return_value = table_ret
+
+    cutoff = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    with patch.object(SupabaseStorageProvider, "_ensure_client"):
+        provider = SupabaseStorageProvider(url="https://fake.supabase.co", key="fake-key")
+        provider._client = mock_client
+
+        n = provider.delete_items_not_updated_since(cutoff, store_names=None)
+
+    assert n == 2
+    mock_client.table.assert_called_once_with("products")
+    chain.lt.assert_called_once_with("updated_at", "2025-01-01T00:00:00Z")
+    chain.select.assert_called_once_with("id")
+    chain.in_.assert_not_called()
+
+
+def test_supabase_delete_stale_items_scoped_stores() -> None:
+    chain = MagicMock()
+    chain.lt.return_value = chain
+    chain.in_.return_value = chain
+    chain.select.return_value = chain
+    chain.execute.return_value = MagicMock(data=[{"id": 1}])
+
+    table_ret = MagicMock()
+    table_ret.delete.return_value = chain
+
+    mock_client = MagicMock()
+    mock_client.table.return_value = table_ret
+
+    cutoff = datetime(2025, 6, 15, 12, 30, tzinfo=timezone.utc)
+    with patch.object(SupabaseStorageProvider, "_ensure_client"):
+        provider = SupabaseStorageProvider(url="https://fake.supabase.co", key="fake-key")
+        provider._client = mock_client
+
+        n = provider.delete_items_not_updated_since(cutoff, store_names=["A", "B"])
+
+    assert n == 1
+    chain.in_.assert_called_once_with("store", ["A", "B"])

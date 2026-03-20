@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from datetime import datetime, timedelta, timezone
+
 from get_store_url_and_tags.app import (
     PipelineOptions,
     PipelineResult,
@@ -34,6 +36,7 @@ def test_pipeline_options_defaults() -> None:
     assert opts.disable_fetch_clothing_items is False
     assert opts.category is None
     assert opts.store_in_database is False
+    assert opts.delete_stale_items_days is None
 
 
 def test_pipeline_result_success() -> None:
@@ -194,3 +197,58 @@ async def test_run_pipeline_store_in_database_calls_upsert(tmp_path: Path) -> No
                 mock_get_storage.return_value = mock_provider
                 await run_pipeline(config, options)
     mock_provider.upsert.assert_called_once_with(product)
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_delete_stale_items_calls_provider(tmp_path: Path) -> None:
+    config = _make_config()
+    options = PipelineOptions(
+        stores_filter=["TestStore"],
+        disable_fetch_clothing_items=True,
+        delete_stale_items_days=7,
+        debug_dir=tmp_path,
+    )
+    link = StoreLink(name="TestStore", url="https://test.com/cat", tags=["Womens"])
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[link])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        with patch("get_store_url_and_tags.app._get_storage_provider") as mock_get_storage:
+            mock_provider = MagicMock()
+            mock_provider.delete_items_not_updated_since.return_value = 3
+            mock_get_storage.return_value = mock_provider
+            await run_pipeline(config, options)
+
+    mock_provider.delete_items_not_updated_since.assert_called_once()
+    assert mock_provider.delete_items_not_updated_since.call_args.kwargs["store_names"] == [
+        "TestStore"
+    ]
+    cutoff = mock_provider.delete_items_not_updated_since.call_args.args[0]
+
+    delta = datetime.now(timezone.utc) - cutoff
+    assert timedelta(days=6, hours=23) < delta < timedelta(days=7, minutes=5)
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_delete_stale_items_no_store_scope(tmp_path: Path) -> None:
+    config = _make_config()
+    options = PipelineOptions(
+        stores_filter=None,
+        disable_fetch_clothing_items=True,
+        delete_stale_items_days=1,
+        debug_dir=tmp_path,
+    )
+    link = StoreLink(name="TestStore", url="https://test.com/cat", tags=["Womens"])
+    with patch("get_store_url_and_tags.app.DiscoveryOrchestrator") as mock_orch_class:
+        mock_orch = MagicMock()
+        mock_orch.run = AsyncMock(return_value=[link])
+        mock_orch.close = AsyncMock()
+        mock_orch_class.return_value = mock_orch
+        with patch("get_store_url_and_tags.app._get_storage_provider") as mock_get_storage:
+            mock_provider = MagicMock()
+            mock_provider.delete_items_not_updated_since.return_value = 0
+            mock_get_storage.return_value = mock_provider
+            await run_pipeline(config, options)
+
+    assert mock_provider.delete_items_not_updated_since.call_args.kwargs["store_names"] is None

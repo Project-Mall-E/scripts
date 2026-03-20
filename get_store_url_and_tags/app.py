@@ -2,6 +2,7 @@
 
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -30,6 +31,7 @@ class PipelineOptions:
     dump_item_html: bool = False  # save listing page HTML to debug/ for parser development
     max_urls_per_shop: Optional[int] = None  # cap URLs per store (verification/debug)
     store_in_database: bool = False
+    delete_stale_items_days: Optional[int] = None  # if set, delete products older than this many days
     debug_dir: Optional[Path] = None  # where to write dump_store_urls / dump_item_html
 
 
@@ -108,6 +110,29 @@ async def run_pipeline(
                 except Exception as e:
                     logger.error("Failed to persist product %s: %s", p.item_link, e)
 
+    if options.delete_stale_items_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=options.delete_stale_items_days)
+        provider = _get_storage_provider()
+        store_scope = options.stores_filter
+        try:
+            removed = provider.delete_items_not_updated_since(cutoff, store_names=store_scope)
+        except NotImplementedError as e:
+            logger.error(
+                "Stale product delete is not supported for this storage backend (%s)", e
+            )
+        except Exception as e:
+            logger.error("Stale product delete failed: %s", e, exc_info=True)
+        else:
+            scope_msg = (
+                f"stores {store_scope!r}" if store_scope else "all stores"
+            )
+            logger.info(
+                "Stale product delete: removed %d row(s) (%s; updated_at before %s)",
+                removed,
+                scope_msg,
+                cutoff.isoformat(),
+            )
+
     return PipelineResult(entries=entries, products=products)
 
 
@@ -115,7 +140,7 @@ def _get_storage_provider():
     """Return the configured storage provider (Supabase or Firestore).
 
     Default is Supabase unless `STORAGE_BACKEND=firestore`.
-    Used when store_in_database is True.
+    Used for `--store-in-database` upserts and for `--delete-stale-items` when configured.
     """
     from .storage import FirestoreStorageProvider, SupabaseStorageProvider
     backend = os.environ.get("STORAGE_BACKEND", "").strip().lower()
